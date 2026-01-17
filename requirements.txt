@@ -2,3 +2,4 @@ python_version < 3.12
 python-telegram-bot==20.7
 aiohttp
 beautifulsoup4
+requests
