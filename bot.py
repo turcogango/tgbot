@@ -36,19 +36,19 @@ TRON_API_URL = "https://apilist.tronscan.org/api/account"
 
 # ==================== PANEL 1 SITE ID'LERI (Paypanel) ====================
 PANEL1_SITES = {
-    "berlin": {"id": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10", "name": "Berlin"},
-    "7finans": {"id": "fa2f40e9-b4ff-478f-9831-639e7551322a", "name": "7Finans"},
-    "winpanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d", "name": "WinPanel"},
-    "777havale": {"id": "b8576d7f-fc11-47d3-9e6f-07e052308221", "name": "777Havale"}
+    "Berlin": {"id": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10"},
+    "7Finans": {"id": "fa2f40e9-b4ff-478f-9831-639e7551322a"},
+    "WinPanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d"},
+    "777Havale": {"id": "b8576d7f-fc11-47d3-9e6f-07e052308221"}
 }
 
 # ==================== PANEL 2 SITE ID'LERI (TronPanel) ====================
 PANEL2_SITES = {
-    "bahiscasino": {"id": "9c69c72a-5f88-4130-bf9b-cef6755ffb78", "name": "BahisCasino"},
-    "casinowon": {"id": "7af7e276-7dea-4fe2-8762-636e324917ac", "name": "Casinowon"},
-    "lehavale": {"id": "d3ae4fcc-8224-48a4-936b-7f424ea8b26c", "name": "Lehavale"},
-    "tlcasino": {"id": "d36896e8-8500-4905-bc7c-c0988214b213", "name": "TLCasino"},
-    "wbahis": {"id": "b724ae8c-bd4b-4147-acb6-dfb72656c5d5", "name": "Wbahis"}
+    "BahisCasino": {"id": "9c69c72a-5f88-4130-bf9b-cef6755ffb78"},
+    "Casinowon": {"id": "7af7e276-7dea-4fe2-8762-636e324917ac"},
+    "Lehavale": {"id": "d3ae4fcc-8224-48a4-936b-7f424ea8b26c"},
+    "TLCasino": {"id": "d36896e8-8500-4905-bc7c-c0988214b213"},
+    "Wbahis": {"id": "b724ae8c-bd4b-4147-acb6-dfb72656c5d5"}
 }
 
 # ==================== TL FORMAT ====================
@@ -79,15 +79,15 @@ async def fetch_site_data(session, reports_url, api_csrf, site_info, today):
             dep = data.get("deposit", [0, 0, 0, 0])
             wth = data.get("withdraw", [0, 0, 0, 0])
             
-            return site_info["name"], {
+            return site_info.get("name", ""), {
                 "yat": dep[0],
                 "yat_adet": int(float(dep[2])) if len(dep) > 2 and dep[2] is not None else 0,
                 "cek": wth[0],
                 "cek_adet": int(float(wth[2])) if len(wth) > 2 and wth[2] is not None else 0
             }
     except Exception as e:
-        print(f"Site verisi çekilemedi ({site_info['name']}): {e}")
-        return site_info["name"], {"yat": 0, "yat_adet": 0, "cek": 0, "cek_adet": 0}
+        print(f"Site verisi çekilemedi ({site_info.get('name', '')}): {e}")
+        return site_info.get("name", ""), {"yat": 0, "yat_adet": 0, "cek": 0, "cek_adet": 0}
 
 async def fetch_panel_data(panel_url, username, password, sites, use_plural=False):
     ssl_context = ssl.create_default_context()
@@ -164,7 +164,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for k, v in panel1_data.items():
                 if float(v["yat"]) > 0 or float(v["cek"]) > 0:
                     text += (
-                        f"*{v['name']}*\n"
+                        f"*{k}*\n"
                         f"💵 Yatırım : `{format_number(v['yat'])}` _({v['yat_adet']} adet)_\n"
                         f"💸 Çekim  : `{format_number(v['cek'])}` _({v['cek_adet']} adet)_\n\n"
                     )
@@ -175,7 +175,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for k, v in panel2_data.items():
                 if float(v["yat"]) > 0 or float(v["cek"]) > 0:
                     text += (
-                        f"*{v['name']}*\n"
+                        f"*{k}*\n"
                         f"💵 Yatırım : `{format_number(v['yat'])}` _({v['yat_adet']} adet)_\n"
                         f"💸 Çekim  : `{format_number(v['cek'])}` _({v['cek_adet']} adet)_\n\n"
                     )
