@@ -16,7 +16,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 # ==================== ENV AYARLARI ====================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Panel 1 - Berlin Panel
+# Panel 1 - Paypanel (Berlin Panel)
 PANEL1_URL = os.getenv("PANEL_URL")
 PANEL1_USERNAME = os.getenv("USERNAME")
 PANEL1_PASSWORD = os.getenv("PASSWORD")
@@ -33,7 +33,7 @@ if not BOT_TOKEN:
 TRX_ADDRESS = "TSjQYavgJBGPr8iV3zH7qo1bx927qKVMwA"
 TRON_API_URL = "https://apilist.tronscan.org/api/account"
 
-# ==================== PANEL 1 SITE ID'LERI (Berlin Panel) ====================
+# ==================== PANEL 1 SITE ID'LERI (Paypanel) ====================
 PANEL1_SITES = {
     "berlin": {
         "id": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10",
@@ -79,6 +79,8 @@ PANEL2_SITES = {
 
 # ==================== TL FORMAT ====================
 def format_number(value):
+    if value is None:
+        return "0 TL"
     try:
         num = int(float(str(value).replace(',', '').replace(' ', '')))
         return f"{num:,}".replace(",", ".") + " TL"
@@ -86,13 +88,14 @@ def format_number(value):
         return f"{value} TL"
 
 # ==================== PANEL VERI CEKME (GENEL) ====================
-async def fetch_panel_data(panel_url, username, password, sites):
+async def fetch_panel_data(panel_url, username, password, sites, use_plural=False):
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
     
     login_url = f"{panel_url}/login"
-    reports_url = f"{panel_url}/report/quickly"
+    # Paypanel (Panel 1) plural /reports kullanır, TronPanel (Panel 2) singular /report kullanır.
+    reports_url = f"{panel_url}/{'reports' if use_plural else 'report'}/quickly"
     
     connector = aiohttp.TCPConnector(ssl=ssl_context)
     
@@ -133,16 +136,19 @@ async def fetch_panel_data(panel_url, username, password, sites):
                     }
                 ) as r:
                     data = await r.json()
+                    # deposit/withdraw listelerinde 0: tutar, 2: günlük adet bilgisi yer alır.
                     dep = data.get("deposit", [0, 0, 0, 0])
                     wth = data.get("withdraw", [0, 0, 0, 0])
                     
+                    # Kullanıcı günlük adetleri (index 2) istediği için güncellendi.
                     result[s["name"]] = {
                         "yat": dep[0],
-                        "yat_adet": dep[1] if len(dep) > 1 else 0,
+                        "yat_adet": int(float(dep[2])) if len(dep) > 2 and dep[2] is not None else 0,
                         "cek": wth[0],
-                        "cek_adet": wth[1] if len(wth) > 1 else 0
+                        "cek_adet": int(float(wth[2])) if len(wth) > 2 and wth[2] is not None else 0
                     }
-            except:
+            except Exception as e:
+                print(f"Site verisi çekilemedi ({s['name']}): {e}")
                 result[s["name"]] = {"yat": 0, "yat_adet": 0, "cek": 0, "cek_adet": 0}
         
         return result
@@ -151,20 +157,22 @@ async def fetch_panel_data(panel_url, username, password, sites):
 async def fetch_all_data():
     today = datetime.now().strftime("%Y-%m-%d")
     
-    # Panel 1 verileri
+    # Panel 1 verileri (Paypanel plural /reports kullanır)
     try:
         panel1_data = await fetch_panel_data(
-            PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, PANEL1_SITES
+            PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, PANEL1_SITES, use_plural=True
         )
-    except:
+    except Exception as e:
+        print(f"Panel 1 hatası: {e}")
         panel1_data = {}
     
-    # Panel 2 verileri
+    # Panel 2 verileri (TronPanel singular /report kullanır)
     try:
         panel2_data = await fetch_panel_data(
-            PANEL2_URL, PANEL2_USERNAME, PANEL2_PASSWORD, PANEL2_SITES
+            PANEL2_URL, PANEL2_USERNAME, PANEL2_PASSWORD, PANEL2_SITES, use_plural=False
         )
-    except:
+    except Exception as e:
+        print(f"Panel 2 hatası: {e}")
         panel2_data = {}
     
     return today, panel1_data, panel2_data
@@ -212,7 +220,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text(text, parse_mode="Markdown")
         
     except Exception as e:
-        print(f"Hata: {e}")
+        print(f"Genel hata: {e}")
         await msg.edit_text("❌ Veriler alınırken hata oluştu")
 
 async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
