@@ -80,9 +80,9 @@ async def fetch_site_data(session, reports_url, api_csrf, site_info, today):
             wth = data.get("withdraw", [0, 0, 0, 0])
             
             return site_info.get("name", ""), {
-                "yat": dep[0],
+                "yat": float(dep[0]) if dep[0] is not None else 0,
                 "yat_adet": int(float(dep[2])) if len(dep) > 2 and dep[2] is not None else 0,
-                "cek": wth[0],
+                "cek": float(wth[0]) if wth[0] is not None else 0,
                 "cek_adet": int(float(wth[2])) if len(wth) > 2 and wth[2] is not None else 0
             }
     except Exception as e:
@@ -220,7 +220,8 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("veri", veri))
     app.add_handler(CommandHandler("tether", tether))
-    app.run_polling()
+    # Tek instance ile çalışacak şekilde polling
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
