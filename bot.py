@@ -7,7 +7,7 @@ Railway uyumlu - TL formatlı
 import os
 import ssl
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 import aiohttp
 import requests
 from bs4 import BeautifulSoup
@@ -63,6 +63,7 @@ def format_number(value):
 
 # ==================== PANEL VERI CEKME (GENEL) ====================
 async def fetch_site_data(session, reports_url, api_csrf, site_info, today):
+    """Tek bir site için veri çeker (paralel çalışabilir)"""
     try:
         async with session.post(
             reports_url,
@@ -79,15 +80,15 @@ async def fetch_site_data(session, reports_url, api_csrf, site_info, today):
             dep = data.get("deposit", [0, 0, 0, 0])
             wth = data.get("withdraw", [0, 0, 0, 0])
             
-            return site_info.get("name", ""), {
+            return site_info["id"], {
                 "yat": float(dep[0]) if dep[0] is not None else 0,
                 "yat_adet": int(float(dep[2])) if len(dep) > 2 and dep[2] is not None else 0,
                 "cek": float(wth[0]) if wth[0] is not None else 0,
                 "cek_adet": int(float(wth[2])) if len(wth) > 2 and wth[2] is not None else 0
             }
     except Exception as e:
-        print(f"Site verisi çekilemedi ({site_info.get('name', '')}): {e}")
-        return site_info.get("name", ""), {"yat": 0, "yat_adet": 0, "cek": 0, "cek_adet": 0}
+        print(f"Site verisi çekilemedi ({site_info['id']}): {e}")
+        return site_info["id"], {"yat": 0, "yat_adet": 0, "cek": 0, "cek_adet": 0}
 
 async def fetch_panel_data(panel_url, username, password, sites, use_plural=False):
     ssl_context = ssl.create_default_context()
@@ -116,14 +117,12 @@ async def fetch_panel_data(panel_url, username, password, sites, use_plural=Fals
             meta = soup.find("meta", {"name": "csrf-token"})
             api_csrf = meta["content"] if meta else ""
         
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
         
         tasks = [fetch_site_data(session, reports_url, api_csrf, s, today) for s in sites.values()]
         results = await asyncio.gather(*tasks)
-        
         return dict(results)
 
-# ==================== TUM VERILERI CEK ====================
 async def fetch_all_data():
     async def get_panel1():
         try:
@@ -131,19 +130,19 @@ async def fetch_all_data():
         except Exception as e:
             print(f"Panel 1 hatası: {e}")
             return {}
-    
+
     async def get_panel2():
         try:
             return await fetch_panel_data(PANEL2_URL, PANEL2_USERNAME, PANEL2_PASSWORD, PANEL2_SITES, use_plural=False)
         except Exception as e:
             print(f"Panel 2 hatası: {e}")
             return {}
-    
+
     panel1_data, panel2_data = await asyncio.gather(get_panel1(), get_panel2())
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
     return today, panel1_data, panel2_data
 
-# ==================== TELEGRAM KOMUTLARI ====================
+# ==================== TELEGRAM ====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎰 Veri Bot\n\n"
@@ -153,10 +152,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("⏳ Veriler çekiliyor...")
-    
     try:
         date, panel1_data, panel2_data = await fetch_all_data()
-        text = f"📊 *{date} – Günlük Rapor*\n\n"
+        text = f"📊 *{date}*\n\n"
         
         # Panel 1
         if panel1_data:
@@ -165,10 +163,10 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if float(v["yat"]) > 0 or float(v["cek"]) > 0:
                     text += (
                         f"*{k}*\n"
-                        f"💵 Yatırım : `{format_number(v['yat'])}` _({v['yat_adet']} adet)_\n"
-                        f"💸 Çekim  : `{format_number(v['cek'])}` _({v['cek_adet']} adet)_\n\n"
+                        f"💵 Yatırım : `{format_number(v['yat'])}` ({v['yat_adet']} adet)\n"
+                        f"💸 Çekim  : `{format_number(v['cek'])}` ({v['cek_adet']} adet)\n\n"
                     )
-        
+
         # Panel 2
         if panel2_data:
             text += "🟢 *TRONPANEL*\n\n"
@@ -176,12 +174,12 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if float(v["yat"]) > 0 or float(v["cek"]) > 0:
                     text += (
                         f"*{k}*\n"
-                        f"💵 Yatırım : `{format_number(v['yat'])}` _({v['yat_adet']} adet)_\n"
-                        f"💸 Çekim  : `{format_number(v['cek'])}` _({v['cek_adet']} adet)_\n\n"
+                        f"💵 Yatırım : `{format_number(v['yat'])}` ({v['yat_adet']} adet)\n"
+                        f"💸 Çekim  : `{format_number(v['cek'])}` ({v['cek_adet']} adet)\n\n"
                     )
-        
+        if text.strip() == f"📊 *{date}*":
+            text += "✅ Bugün için aktif veri yok."
         await msg.edit_text(text, parse_mode="Markdown")
-        
     except Exception as e:
         print(f"Genel hata: {e}")
         await msg.edit_text("❌ Veriler alınırken hata oluştu")
@@ -189,26 +187,20 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         msg = await update.message.reply_text("⏳ Hesaplanıyor...")
-
         r = requests.get(TRON_API_URL, params={"address": TRX_ADDRESS}, timeout=10)
         data = r.json()
-
         trx_balance = data.get("balance", 0) / 1_000_000
-
         usdt_balance = 0.0
         for t in data.get("trc20token_balances", []):
             if t.get("tokenId") == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t":
                 usdt_balance = int(t.get("balance", 0)) / 1_000_000
                 break
-
         text = (
             f"📍 {TRX_ADDRESS}\n\n"
             f"⭐️ TRX: {trx_balance:,.2f} TRX\n"
             f"⭐️ USDT: ${usdt_balance:,.2f}"
         )
-
         await msg.edit_text(text)
-
     except Exception as e:
         print(e)
         await update.message.reply_text("❌ Veri okunamadı")
@@ -220,8 +212,10 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("veri", veri))
     app.add_handler(CommandHandler("tether", tether))
-    # Tek instance ile çalışacak şekilde polling
-    app.run_polling(drop_pending_updates=True)
+    try:
+        app.run_polling(drop_pending_updates=True)
+    except Exception as e:
+        print("Polling hatası, devam ediliyor:", e)
 
 if __name__ == "__main__":
     main()
