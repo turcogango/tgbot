@@ -90,7 +90,6 @@ def format_number(value):
 
 # ==================== PANEL VERI CEKME (GENEL) ====================
 async def fetch_site_data(session, reports_url, api_csrf, site_info, today):
-    """Tek bir site için veri çeker (paralel çalışabilir)"""
     try:
         async with session.post(
             reports_url,
@@ -128,20 +127,17 @@ async def fetch_panel_data(panel_url, username, password, sites, use_plural=Fals
     connector = aiohttp.TCPConnector(ssl=ssl_context)
     
     async with aiohttp.ClientSession(connector=connector) as session:
-        # Login sayfasından CSRF token al
         async with session.get(login_url) as r:
             soup = BeautifulSoup(await r.text(), "html.parser")
             csrf = soup.find("input", {"name": "_token"})
             csrf_token = csrf["value"] if csrf else ""
         
-        # Giriş yap
         await session.post(login_url, data={
             "_token": csrf_token,
             "email": username,
             "password": password
         })
         
-        # Rapor sayfasından CSRF token al
         async with session.get(reports_url) as r:
             soup = BeautifulSoup(await r.text(), "html.parser")
             meta = soup.find("meta", {"name": "csrf-token"})
@@ -149,7 +145,6 @@ async def fetch_panel_data(panel_url, username, password, sites, use_plural=Fals
         
         today = datetime.now().strftime("%Y-%m-%d")
         
-        # 🚀 TÜM SİTELERİ PARALEL ÇEK
         tasks = [
             fetch_site_data(session, reports_url, api_csrf, s, today)
             for s in sites.values()
@@ -160,9 +155,6 @@ async def fetch_panel_data(panel_url, username, password, sites, use_plural=Fals
 
 # ==================== TUM VERILERI CEK ====================
 async def fetch_all_data():
-    today = datetime.now().strftime("%Y-%m-%d")
-    
-    # 🚀 HER İKİ PANELİ PARALEL ÇEK
     async def get_panel1():
         try:
             return await fetch_panel_data(
@@ -182,10 +174,10 @@ async def fetch_all_data():
             return {}
     
     panel1_data, panel2_data = await asyncio.gather(get_panel1(), get_panel2())
-    
+    today = datetime.now().strftime("%Y-%m-%d")
     return today, panel1_data, panel2_data
 
-# ==================== TELEGRAM ====================
+# ==================== TELEGRAM KOMUTLARI ====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎰 Veri Bot\n\n"
@@ -198,32 +190,29 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         date, panel1_data, panel2_data = await fetch_all_data()
+        text = f"📊 *{date} – Günlük Rapor*\n\n"
         
-        text = f"📊 *{date}*\n\n"
-        
-        # Panel 1 Verileri
+        # Panel 1
         if panel1_data:
-            text += "━━━━━━━━━━━━━━━━━━━━\n"
-            text += "🔵 *PANEL 1 (Paypanel)*\n"
-            text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+            text += "🔵 *PAYPANEL*\n\n"
             for k, v in panel1_data.items():
-                text += (
-                    f"🏷️ *{k}*\n"
-                    f"Yat: `{format_number(v['yat'])}` ({v['yat_adet']} adet)\n"
-                    f"Çek: `{format_number(v['cek'])}` ({v['cek_adet']} adet)\n\n"
-                )
+                if v["yat"] > 0 or v["cek"] > 0:
+                    text += (
+                        f"*{v['name']}*\n"
+                        f"💵 Yatırım : `{format_number(v['yat'])}` _({v['yat_adet']} adet)_\n"
+                        f"💸 Çekim  : `{format_number(v['cek'])}` _({v['cek_adet']} adet)_\n\n"
+                    )
         
-        # Panel 2 Verileri
+        # Panel 2
         if panel2_data:
-            text += "━━━━━━━━━━━━━━━━━━━━\n"
-            text += "🟢 *PANEL 2 (TronPanel)*\n"
-            text += "━━━━━━━━━━━━━━━━━━━━\n\n"
+            text += "🟢 *TRONPANEL*\n\n"
             for k, v in panel2_data.items():
-                text += (
-                    f"🏷️ *{k}*\n"
-                    f"Yat: `{format_number(v['yat'])}` ({v['yat_adet']} adet)\n"
-                    f"Çek: `{format_number(v['cek'])}` ({v['cek_adet']} adet)\n\n"
-                )
+                if v["yat"] > 0 or v["cek"] > 0:
+                    text += (
+                        f"*{v['name']}*\n"
+                        f"💵 Yatırım : `{format_number(v['yat'])}` _({v['yat_adet']} adet)_\n"
+                        f"💸 Çekim  : `{format_number(v['cek'])}` _({v['cek_adet']} adet)_\n\n"
+                    )
         
         await msg.edit_text(text, parse_mode="Markdown")
         
