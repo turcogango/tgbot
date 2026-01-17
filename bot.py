@@ -36,46 +36,19 @@ TRON_API_URL = "https://apilist.tronscan.org/api/account"
 
 # ==================== PANEL 1 SITE ID'LERI (Paypanel) ====================
 PANEL1_SITES = {
-    "berlin": {
-        "id": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10",
-        "name": "Berlin"
-    },
-    "7finans": {
-        "id": "fa2f40e9-b4ff-478f-9831-639e7551322a",
-        "name": "7Finans"
-    },
-    "winpanel": {
-        "id": "2f271e79-7386-4af9-7cf2-e699904c2d0d",
-        "name": "WinPanel"
-    },
-    "777havale": {
-        "id": "b8576d7f-fc11-47d3-9e6f-07e052308221",
-        "name": "777Havale"
-    }
+    "berlin": {"id": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10", "name": "Berlin"},
+    "7finans": {"id": "fa2f40e9-b4ff-478f-9831-639e7551322a", "name": "7Finans"},
+    "winpanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d", "name": "WinPanel"},
+    "777havale": {"id": "b8576d7f-fc11-47d3-9e6f-07e052308221", "name": "777Havale"}
 }
 
 # ==================== PANEL 2 SITE ID'LERI (TronPanel) ====================
 PANEL2_SITES = {
-    "bahiscasino": {
-        "id": "9c69c72a-5f88-4130-bf9b-cef6755ffb78",
-        "name": "BahisCasino"
-    },
-    "casinowon": {
-        "id": "7af7e276-7dea-4fe2-8762-636e324917ac",
-        "name": "Casinowon"
-    },
-    "lehavale": {
-        "id": "d3ae4fcc-8224-48a4-936b-7f424ea8b26c",
-        "name": "Lehavale"
-    },
-    "tlcasino": {
-        "id": "d36896e8-8500-4905-bc7c-c0988214b213",
-        "name": "TLCasino"
-    },
-    "wbahis": {
-        "id": "b724ae8c-bd4b-4147-acb6-dfb72656c5d5",
-        "name": "Wbahis"
-    }
+    "bahiscasino": {"id": "9c69c72a-5f88-4130-bf9b-cef6755ffb78", "name": "BahisCasino"},
+    "casinowon": {"id": "7af7e276-7dea-4fe2-8762-636e324917ac", "name": "Casinowon"},
+    "lehavale": {"id": "d3ae4fcc-8224-48a4-936b-7f424ea8b26c", "name": "Lehavale"},
+    "tlcasino": {"id": "d36896e8-8500-4905-bc7c-c0988214b213", "name": "TLCasino"},
+    "wbahis": {"id": "b724ae8c-bd4b-4147-acb6-dfb72656c5d5", "name": "Wbahis"}
 }
 
 # ==================== TL FORMAT ====================
@@ -145,10 +118,7 @@ async def fetch_panel_data(panel_url, username, password, sites, use_plural=Fals
         
         today = datetime.now().strftime("%Y-%m-%d")
         
-        tasks = [
-            fetch_site_data(session, reports_url, api_csrf, s, today)
-            for s in sites.values()
-        ]
+        tasks = [fetch_site_data(session, reports_url, api_csrf, s, today) for s in sites.values()]
         results = await asyncio.gather(*tasks)
         
         return dict(results)
@@ -157,18 +127,14 @@ async def fetch_panel_data(panel_url, username, password, sites, use_plural=Fals
 async def fetch_all_data():
     async def get_panel1():
         try:
-            return await fetch_panel_data(
-                PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, PANEL1_SITES, use_plural=True
-            )
+            return await fetch_panel_data(PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, PANEL1_SITES, use_plural=True)
         except Exception as e:
             print(f"Panel 1 hatası: {e}")
             return {}
     
     async def get_panel2():
         try:
-            return await fetch_panel_data(
-                PANEL2_URL, PANEL2_USERNAME, PANEL2_PASSWORD, PANEL2_SITES, use_plural=False
-            )
+            return await fetch_panel_data(PANEL2_URL, PANEL2_USERNAME, PANEL2_PASSWORD, PANEL2_SITES, use_plural=False)
         except Exception as e:
             print(f"Panel 2 hatası: {e}")
             return {}
@@ -196,7 +162,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if panel1_data:
             text += "🔵 *PAYPANEL*\n\n"
             for k, v in panel1_data.items():
-                if v["yat"] > 0 or v["cek"] > 0:
+                if float(v["yat"]) > 0 or float(v["cek"]) > 0:
                     text += (
                         f"*{v['name']}*\n"
                         f"💵 Yatırım : `{format_number(v['yat'])}` _({v['yat_adet']} adet)_\n"
@@ -207,7 +173,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if panel2_data:
             text += "🟢 *TRONPANEL*\n\n"
             for k, v in panel2_data.items():
-                if v["yat"] > 0 or v["cek"] > 0:
+                if float(v["yat"]) > 0 or float(v["cek"]) > 0:
                     text += (
                         f"*{v['name']}*\n"
                         f"💵 Yatırım : `{format_number(v['yat'])}` _({v['yat_adet']} adet)_\n"
