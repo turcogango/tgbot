@@ -6,6 +6,7 @@ Railway uyumlu - TL formatlı
 
 import os
 import ssl
+import asyncio
 from datetime import datetime
 import aiohttp
 import requests
@@ -88,13 +89,40 @@ def format_number(value):
         return f"{value} TL"
 
 # ==================== PANEL VERI CEKME (GENEL) ====================
+async def fetch_site_data(session, reports_url, api_csrf, site_info, today):
+    """Tek bir site için veri çeker (paralel çalışabilir)"""
+    try:
+        async with session.post(
+            reports_url,
+            headers={"X-CSRF-TOKEN": api_csrf},
+            json={
+                "site": site_info["id"],
+                "dateone": today,
+                "datetwo": today,
+                "bank": "",
+                "user": ""
+            }
+        ) as r:
+            data = await r.json()
+            dep = data.get("deposit", [0, 0, 0, 0])
+            wth = data.get("withdraw", [0, 0, 0, 0])
+            
+            return site_info["name"], {
+                "yat": dep[0],
+                "yat_adet": int(float(dep[2])) if len(dep) > 2 and dep[2] is not None else 0,
+                "cek": wth[0],
+                "cek_adet": int(float(wth[2])) if len(wth) > 2 and wth[2] is not None else 0
+            }
+    except Exception as e:
+        print(f"Site verisi çekilemedi ({site_info['name']}): {e}")
+        return site_info["name"], {"yat": 0, "yat_adet": 0, "cek": 0, "cek_adet": 0}
+
 async def fetch_panel_data(panel_url, username, password, sites, use_plural=False):
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
     
     login_url = f"{panel_url}/login"
-    # Paypanel (Panel 1) plural /reports kullanır, TronPanel (Panel 2) singular /report kullanır.
     reports_url = f"{panel_url}/{'reports' if use_plural else 'report'}/quickly"
     
     connector = aiohttp.TCPConnector(ssl=ssl_context)
@@ -120,60 +148,40 @@ async def fetch_panel_data(panel_url, username, password, sites, use_plural=Fals
             api_csrf = meta["content"] if meta else ""
         
         today = datetime.now().strftime("%Y-%m-%d")
-        result = {}
         
-        for s in sites.values():
-            try:
-                async with session.post(
-                    reports_url,
-                    headers={"X-CSRF-TOKEN": api_csrf},
-                    json={
-                        "site": s["id"],
-                        "dateone": today,
-                        "datetwo": today,
-                        "bank": "",
-                        "user": ""
-                    }
-                ) as r:
-                    data = await r.json()
-                    # deposit/withdraw listelerinde 0: tutar, 2: günlük adet bilgisi yer alır.
-                    dep = data.get("deposit", [0, 0, 0, 0])
-                    wth = data.get("withdraw", [0, 0, 0, 0])
-                    
-                    # Kullanıcı günlük adetleri (index 2) istediği için güncellendi.
-                    result[s["name"]] = {
-                        "yat": dep[0],
-                        "yat_adet": int(float(dep[2])) if len(dep) > 2 and dep[2] is not None else 0,
-                        "cek": wth[0],
-                        "cek_adet": int(float(wth[2])) if len(wth) > 2 and wth[2] is not None else 0
-                    }
-            except Exception as e:
-                print(f"Site verisi çekilemedi ({s['name']}): {e}")
-                result[s["name"]] = {"yat": 0, "yat_adet": 0, "cek": 0, "cek_adet": 0}
+        # 🚀 TÜM SİTELERİ PARALEL ÇEK
+        tasks = [
+            fetch_site_data(session, reports_url, api_csrf, s, today)
+            for s in sites.values()
+        ]
+        results = await asyncio.gather(*tasks)
         
-        return result
+        return dict(results)
 
 # ==================== TUM VERILERI CEK ====================
 async def fetch_all_data():
     today = datetime.now().strftime("%Y-%m-%d")
     
-    # Panel 1 verileri (Paypanel plural /reports kullanır)
-    try:
-        panel1_data = await fetch_panel_data(
-            PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, PANEL1_SITES, use_plural=True
-        )
-    except Exception as e:
-        print(f"Panel 1 hatası: {e}")
-        panel1_data = {}
+    # 🚀 HER İKİ PANELİ PARALEL ÇEK
+    async def get_panel1():
+        try:
+            return await fetch_panel_data(
+                PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, PANEL1_SITES, use_plural=True
+            )
+        except Exception as e:
+            print(f"Panel 1 hatası: {e}")
+            return {}
     
-    # Panel 2 verileri (TronPanel singular /report kullanır)
-    try:
-        panel2_data = await fetch_panel_data(
-            PANEL2_URL, PANEL2_USERNAME, PANEL2_PASSWORD, PANEL2_SITES, use_plural=False
-        )
-    except Exception as e:
-        print(f"Panel 2 hatası: {e}")
-        panel2_data = {}
+    async def get_panel2():
+        try:
+            return await fetch_panel_data(
+                PANEL2_URL, PANEL2_USERNAME, PANEL2_PASSWORD, PANEL2_SITES, use_plural=False
+            )
+        except Exception as e:
+            print(f"Panel 2 hatası: {e}")
+            return {}
+    
+    panel1_data, panel2_data = await asyncio.gather(get_panel1(), get_panel2())
     
     return today, panel1_data, panel2_data
 
