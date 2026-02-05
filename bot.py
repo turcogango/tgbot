@@ -33,10 +33,7 @@ TRON_API_URL = "https://apilist.tronscan.org/api/account"
 
 # ==================== PANEL SITE ID'LERI ====================
 PANEL1_SITES = {
-    "berlin": {"id": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10", "name": "Berlin"},
-    "7finans": {"id": "fa2f40e9-b4ff-478f-9831-639e7551322a", "name": "7Finans"},
     "winpanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d", "name": "WinPanel"},
-    "777havale": {"id": "b8576d7f-fc11-47d3-9e6f-07e052308221", "name": "777Havale"},
     "jaguarpanel": {"id": "698e467b-a871-4e18-978e-3d70adc534f4", "name": "JaguarPanel"},
     "7paytikso": {"id": "fa2009f2-8197-48d6-aa4f-dc6f65be7da9", "name": "7pay-TİKSO"}
 }
