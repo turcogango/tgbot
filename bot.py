@@ -34,18 +34,10 @@ TRON_API_URL = "https://apilist.tronscan.org/api/account"
 # ==================== PANEL SITE ID'LERI ====================
 PANEL1_SITES = {
     "winpanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d", "name": "WinPanel"},
+    "777Havale": {"id": "b8576d7f-fc11-47d3-9e6f-07e052308221", "name": "777Havale"},
     "jaguarpanel": {"id": "698e467b-a871-4e18-978e-3d70adc534f4", "name": "JaguarPanel"},
     "7paytikso": {"id": "fa2009f2-8197-48d6-aa4f-dc6f65be7da9", "name": "7pay-TİKSO"}
 }
-
-PANEL2_SITES = {
-    "bahiscasino": {"id": "9c69c72a-5f88-4130-bf9b-cef6755ffb78", "name": "BahisCasino"},
-    "casinowon": {"id": "7af7e276-7dea-4fe2-8762-636e324917ac", "name": "Casinowon"},
-    "lehavale": {"id": "d3ae4fcc-8224-48a4-936b-7f424ea8b26c", "name": "Lehavale"},
-    "tlcasino": {"id": "d36896e8-8500-4905-bc7c-c0988214b213", "name": "TLCasino"},
-    "wbahis": {"id": "b724ae8c-bd4b-4147-acb6-dfb72656c5d5", "name": "Wbahis"}
-}
-
 # ==================== TL FORMAT ====================
 def format_number(value):
     if value is None:
