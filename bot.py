@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Telegram Bot - Berlin & Madrid Panel - Railway Uyumlu
+# Telegram Bot - BERLİN & MADRİD Panel - Railway Uyumlu (Stabil)
 
 import os
 import ssl
@@ -17,16 +17,18 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-PANEL1_URL = os.getenv("PANEL1_URL")
-PANEL1_USERNAME = os.getenv("PANEL1_USERNAME")
-PANEL1_PASSWORD = os.getenv("PANEL1_PASSWORD")
+# PANEL 1 -> BERLİN  (senin variable isimlerinle)
+PANEL1_URL = os.getenv("PANEL_URL")
+PANEL1_USERNAME = os.getenv("USERNAME")
+PANEL1_PASSWORD = os.getenv("PASSWORD")
 
+# PANEL 2 -> MADRİD (senin variable isimlerinle)
 PANEL2_URL = os.getenv("PANEL2_URL")
 PANEL2_USERNAME = os.getenv("PANEL2_USERNAME")
 PANEL2_PASSWORD = os.getenv("PANEL2_PASSWORD")
 
 if not BOT_TOKEN:
-    raise RuntimeError("❌ BOT_TOKEN bulunamadı")
+    raise RuntimeError("BOT_TOKEN bulunamadı")
 
 # ==================== TRX AYARLARI ====================
 
@@ -79,20 +81,21 @@ async def fetch_site_data(session, reports_url, csrf, site_id, today):
             "cek_adet": int(wth[2] or 0)
         }
 
-async def fetch_panel(panel_url, username, password, sites, plural):
+async def fetch_panel(panel_url, username, password, sites):
     ssl_ctx = ssl.create_default_context()
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
 
     login_url = f"{panel_url}/login"
-    reports_url = f"{panel_url}/{'reports' if plural else 'report'}/quickly"
+    reports_url = f"{panel_url}/reports/quickly"
 
     connector = aiohttp.TCPConnector(ssl=ssl_ctx)
     async with aiohttp.ClientSession(connector=connector) as session:
 
         async with session.get(login_url) as r:
             soup = BeautifulSoup(await r.text(), "html.parser")
-            token = soup.find("input", {"name": "_token"})["value"]
+            token_input = soup.find("input", {"name": "_token"})
+            token = token_input["value"] if token_input else ""
 
         await session.post(login_url, data={
             "_token": token,
@@ -102,7 +105,8 @@ async def fetch_panel(panel_url, username, password, sites, plural):
 
         async with session.get(reports_url) as r:
             soup = BeautifulSoup(await r.text(), "html.parser")
-            csrf = soup.find("meta", {"name": "csrf-token"})["content"]
+            meta = soup.find("meta", {"name": "csrf-token"})
+            csrf = meta["content"] if meta else ""
 
         today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
 
@@ -127,26 +131,26 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("⏳ Veriler çekiliyor...")
 
     try:
-        panel1 = await fetch_panel(
-            PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, PANEL1_SITES, True
+        berlin = await fetch_panel(
+            PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, PANEL1_SITES
         )
-        panel2 = await fetch_panel(
-            PANEL2_URL, PANEL2_USERNAME, PANEL2_PASSWORD, PANEL2_SITES, False
+        madrid = await fetch_panel(
+            PANEL2_URL, PANEL2_USERNAME, PANEL2_PASSWORD, PANEL2_SITES
         )
 
         today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
         text = f"*{today}*\n\n"
 
-        text += " *BERLİN*\n\n"
-        for k, v in panel1.items():
+        text += "📊 *BERLİN*\n\n"
+        for k, v in berlin.items():
             text += (
                 f"{k}\n"
                 f"Yat: {format_number(v['yat'])} ({v['yat_adet']} adet)\n"
                 f"Çek: {format_number(v['cek'])} ({v['cek_adet']} adet)\n\n"
             )
 
-        text += " *MADRİD*\n\n"
-        for k, v in panel2.items():
+        text += "📊 *MADRİD*\n\n"
+        for k, v in madrid.items():
             text += (
                 f"{k}\n"
                 f"Yat: {format_number(v['yat'])} ({v['yat_adet']} adet)\n"
@@ -156,7 +160,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text(text, parse_mode="Markdown")
 
     except Exception as e:
-        print(e)
+        print("HATA:", e)
         await msg.edit_text("❌ Veri alınamadı")
 
 async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
