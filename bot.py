@@ -20,7 +20,7 @@ PANEL1_URL = os.getenv("PANEL_URL")
 PANEL1_USERNAME = os.getenv("USERNAME")
 PANEL1_PASSWORD = os.getenv("PASSWORD")
 
-PANEL2_URL = "https://win.tronpanel.com"
+PANEL2_URL = "https://madrid.paneljaguar.com"
 PANEL2_USERNAME = "ALFİ@123"
 PANEL2_PASSWORD = "102030++"
 
@@ -34,9 +34,11 @@ TRON_API_URL = "https://apilist.tronscan.org/api/account"
 # ==================== PANEL SITE ID'LERI ====================
 PANEL1_SITES = {
     "winpanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d", "name": "WinPanel"},
+    "jaguarpanel": {"id": "698e467b-a871-4e18-978e-3d70adc534f4", "name": "JaguarPanel"}
+}
+PANEL2_SITES = {
     "777Havale": {"id": "b8576d7f-fc11-47d3-9e6f-07e052308221", "name": "777Havale"},
-    "jaguarpanel": {"id": "698e467b-a871-4e18-978e-3d70adc534f4", "name": "JaguarPanel"},
-    "7paytikso": {"id": "fa2009f2-8197-48d6-aa4f-dc6f65be7da9", "name": "7pay-TİKSO"}
+     "7paytikso": {"id": "fa2009f2-8197-48d6-aa4f-dc6f65be7da9", "name": "7pay-TİKSO"}
 }
 # ==================== TL FORMAT ====================
 def format_number(value):
