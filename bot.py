@@ -1,35 +1,40 @@
 #!/usr/bin/env python3
-"""
-Telegram Bot - BERLİN & MADRİD
-GRUP uyumlu | 23:59 otomatik rapor
-"""
+# Telegram Bot - Berlin & Madrid Panel - Railway Uyumlu
 
 import os
 import ssl
 import asyncio
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta
 
 import aiohttp
 from bs4 import BeautifulSoup
+import requests
+
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# ==================== ENV ====================
+# ==================== ENV AYARLARI ====================
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-PANEL1_URL = os.getenv("PANEL_URL")
-PANEL1_USERNAME = os.getenv("USERNAME")
-PANEL1_PASSWORD = os.getenv("PASSWORD")
+PANEL1_URL = os.getenv("PANEL1_URL")
+PANEL1_USERNAME = os.getenv("PANEL1_USERNAME")
+PANEL1_PASSWORD = os.getenv("PANEL1_PASSWORD")
 
 PANEL2_URL = os.getenv("PANEL2_URL")
 PANEL2_USERNAME = os.getenv("PANEL2_USERNAME")
 PANEL2_PASSWORD = os.getenv("PANEL2_PASSWORD")
 
-# ==================== TRX ====================
+if not BOT_TOKEN:
+    raise RuntimeError("❌ BOT_TOKEN bulunamadı")
+
+# ==================== TRX AYARLARI ====================
+
 TRX_ADDRESS = "TSjQYavgJBGPr8iV3zH7qo1bx927qKVMwA"
 TRON_API_URL = "https://apilist.tronscan.org/api/account"
 
-# ==================== SITE ID ====================
+# ==================== PANEL SITE ID'LERI ====================
+
 PANEL1_SITES = {
     "WinPanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d"},
     "JaguarPanel": {"id": "698e467b-a871-4e18-978e-3d70adc534f4"},
@@ -40,108 +45,153 @@ PANEL2_SITES = {
     "7pay-TİKSO": {"id": "fa2009f2-8197-48d6-aa4f-dc6f65be7da9"},
 }
 
-# ==================== GRUP KAYIT ====================
-ACTIVE_CHATS = set()
+# ==================== TL FORMAT ====================
 
-# ==================== FORMAT ====================
-def tl(v):
+def format_number(value):
     try:
-        return f"{int(float(v)):,}".replace(",", ".") + " TL"
+        num = int(float(value))
+        return f"{num:,}".replace(",", ".") + " TL"
     except:
         return "0 TL"
 
-# ==================== PANEL ====================
-async def fetch_site(s, url, csrf, sid, name, today):
-    try:
-        async with s.post(
-            url,
-            headers={"X-CSRF-TOKEN": csrf},
-            json={"site": sid, "dateone": today, "datetwo": today, "bank": "", "user": ""},
-        ) as r:
-            d = await r.json()
-            dep = d.get("deposit", [0, 0, 0])
-            wth = d.get("withdraw", [0, 0, 0])
-            return name, {
-                "yat": dep[0],
-                "cek": wth[0],
-            }
-    except:
-        return name, {"yat": 0, "cek": 0}
+# ==================== PANEL VERI CEKME ====================
 
-async def fetch_panel(url, user, pwd, sites):
+async def fetch_site_data(session, reports_url, csrf, site_id, today):
+    async with session.post(
+        reports_url,
+        headers={"X-CSRF-TOKEN": csrf},
+        json={
+            "site": site_id,
+            "dateone": today,
+            "datetwo": today,
+            "bank": "",
+            "user": ""
+        }
+    ) as r:
+        data = await r.json()
+        dep = data.get("deposit", [0, 0, 0])
+        wth = data.get("withdraw", [0, 0, 0])
+
+        return {
+            "yat": dep[0],
+            "yat_adet": int(dep[2] or 0),
+            "cek": wth[0],
+            "cek_adet": int(wth[2] or 0)
+        }
+
+async def fetch_panel(panel_url, username, password, sites, plural):
     ssl_ctx = ssl.create_default_context()
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
 
-    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=ssl_ctx)) as s:
-        async with s.get(f"{url}/login") as r:
+    login_url = f"{panel_url}/login"
+    reports_url = f"{panel_url}/{'reports' if plural else 'report'}/quickly"
+
+    connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+    async with aiohttp.ClientSession(connector=connector) as session:
+
+        async with session.get(login_url) as r:
             soup = BeautifulSoup(await r.text(), "html.parser")
             token = soup.find("input", {"name": "_token"})["value"]
 
-        await s.post(f"{url}/login", data={"_token": token, "email": user, "password": pwd})
+        await session.post(login_url, data={
+            "_token": token,
+            "email": username,
+            "password": password
+        })
 
-        async with s.get(f"{url}/reports/quickly") as r:
+        async with session.get(reports_url) as r:
             soup = BeautifulSoup(await r.text(), "html.parser")
             csrf = soup.find("meta", {"name": "csrf-token"})["content"]
 
         today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
 
-        tasks = [
-            fetch_site(s, f"{url}/reports/quickly", csrf, v["id"], k, today)
-            for k, v in sites.items()
-        ]
-        return dict(await asyncio.gather(*tasks))
+        results = {}
+        for name, info in sites.items():
+            results[name] = await fetch_site_data(
+                session, reports_url, csrf, info["id"], today
+            )
 
-# ==================== RAPOR ====================
-async def send_daily_report(bot, chat_id):
-    p1, p2 = await asyncio.gather(
-        fetch_panel(PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, PANEL1_SITES),
-        fetch_panel(PANEL2_URL, PANEL2_USERNAME, PANEL2_PASSWORD, PANEL2_SITES),
+        return results
+
+# ==================== TELEGRAM KOMUTLARI ====================
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🤖 Veri Bot\n\n"
+        "/veri - Günlük panel verileri\n"
+        "/tether - TRX & USDT bakiyesi"
     )
 
-    date = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
-    text = f"*{date}*\n\n📊 *BERLİN*\n\n"
+async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = await update.message.reply_text("⏳ Veriler çekiliyor...")
 
-    for k, v in p1.items():
-        text += f"*{k}*\nYat: {tl(v['yat'])}\nÇek: {tl(v['cek'])}\n\n"
+    try:
+        panel1 = await fetch_panel(
+            PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, PANEL1_SITES, True
+        )
+        panel2 = await fetch_panel(
+            PANEL2_URL, PANEL2_USERNAME, PANEL2_PASSWORD, PANEL2_SITES, False
+        )
 
-    text += "📊 *MADRİD*\n\n"
-    for k, v in p2.items():
-        text += f"*{k}*\nYat: {tl(v['yat'])}\nÇek: {tl(v['cek'])}\n\n"
+        today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
+        text = f"*{today}*\n\n"
 
-    await bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
-    await bot.send_message(chat_id=chat_id, text="🎆🎇 ABİİ 🔥🔥🔥 PARA YAĞIYOR 💸💸💸")
+        text += " *BERLİN*\n\n"
+        for k, v in panel1.items():
+            text += (
+                f"{k}\n"
+                f"Yat: {format_number(v['yat'])} ({v['yat_adet']} adet)\n"
+                f"Çek: {format_number(v['cek'])} ({v['cek_adet']} adet)\n\n"
+            )
 
-# ==================== KOMUTLAR ====================
-async def aktif(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    ACTIVE_CHATS.add(chat_id)
-    await update.message.reply_text("✅ Grup aktif edildi\n⏰ Her gün 23:59 otomatik rapor")
+        text += " *MADRİD*\n\n"
+        for k, v in panel2.items():
+            text += (
+                f"{k}\n"
+                f"Yat: {format_number(v['yat'])} ({v['yat_adet']} adet)\n"
+                f"Çek: {format_number(v['cek'])} ({v['cek_adet']} adet)\n\n"
+            )
 
-async def pasif(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    ACTIVE_CHATS.discard(chat_id)
-    await update.message.reply_text("❌ Grup pasif edildi")
+        await msg.edit_text(text, parse_mode="Markdown")
 
-# ==================== JOB ====================
-async def daily_job(context: ContextTypes.DEFAULT_TYPE):
-    for chat_id in list(ACTIVE_CHATS):
-        try:
-            await send_daily_report(context.bot, chat_id)
-            await asyncio.sleep(2)
-        except:
-            pass
+    except Exception as e:
+        print(e)
+        await msg.edit_text("❌ Veri alınamadı")
+
+async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = await update.message.reply_text("⏳ Hesaplanıyor...")
+
+    try:
+        r = requests.get(TRON_API_URL, params={"address": TRX_ADDRESS}, timeout=10)
+        data = r.json()
+
+        trx = data.get("balance", 0) / 1_000_000
+        usdt = 0.0
+
+        for t in data.get("trc20token_balances", []):
+            if t.get("tokenId") == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t":
+                usdt = int(t.get("balance", 0)) / 1_000_000
+
+        await msg.edit_text(
+            f"📍 {TRX_ADDRESS}\n"
+            f"⭐️ TRX: {trx:,.2f}\n"
+            f"⭐️ USDT: ${usdt:,.2f}"
+        )
+
+    except:
+        await msg.edit_text("❌ Bakiye okunamadı")
 
 # ==================== MAIN ====================
+
 def main():
+    print("🤖 Veri Bot başlatıldı")
     app = Application.builder().token(BOT_TOKEN).build()
 
-    app.add_handler(CommandHandler("aktif", aktif))
-    app.add_handler(CommandHandler("pasif", pasif))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("veri", veri))
+    app.add_handler(CommandHandler("tether", tether))
 
-    app.job_queue.run_daily(daily_job, time=time(hour=23, minute=59))
-
-    print("🤖 Grup uyumlu bot çalışıyor")
     app.run_polling()
 
 if __name__ == "__main__":
