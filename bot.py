@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Telegram Bot - BERLİN & MADRİD Panel - Railway Uyumlu (Stabil)
+# Telegram Bot - BERLİN & MADRİD & VENUS - Railway Uyumlu Stabil
 
 import os
 import ssl
@@ -17,25 +17,30 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# PANEL 1 -> BERLİN  (senin variable isimlerinle)
+# PANEL 1 -> BERLİN
 PANEL1_URL = os.getenv("PANEL_URL")
 PANEL1_USERNAME = os.getenv("USERNAME")
 PANEL1_PASSWORD = os.getenv("PASSWORD")
 
-# PANEL 2 -> MADRİD (senin variable isimlerinle)
+# PANEL 2 -> MADRİD
 PANEL2_URL = os.getenv("PANEL2_URL")
 PANEL2_USERNAME = os.getenv("PANEL2_USERNAME")
 PANEL2_PASSWORD = os.getenv("PANEL2_PASSWORD")
 
+# PANEL 3 -> VENUS
+VENUS_URL = os.getenv("VENUS_URL")
+VENUS_USERNAME = os.getenv("VENUS_USERNAME")
+VENUS_PASSWORD = os.getenv("VENUS_PASSWORD")
+
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN bulunamadı")
 
-# ==================== TRX AYARLARI ====================
+# ==================== TRX ====================
 
 TRX_ADDRESS = "TSjQYavgJBGPr8iV3zH7qo1bx927qKVMwA"
 TRON_API_URL = "https://apilist.tronscan.org/api/account"
 
-# ==================== PANEL SITE ID'LERI ====================
+# ==================== SITE ID'LER ====================
 
 PANEL1_SITES = {
     "WinPanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d"},
@@ -47,7 +52,16 @@ PANEL2_SITES = {
     "7pay-TİKSO": {"id": "fa2009f2-8197-48d6-aa4f-dc6f65be7da9"},
 }
 
-# ==================== TL FORMAT ====================
+VENUS_SITES = {
+    "B": {"id": "9d282a4b-9664-4467-a53e-6b774cbf6d01"},
+    "W": {"id": "48bedac9-2d1b-4a96-b736-e55de3fba453"},
+    "T": {"id": "dee8e5a2-38ad-4006-8ad9-c622471e9e69"},
+    "O": {"id": "d45c6fc9-bedd-4e3a-be0d-57aad4f958ea"},
+    "TRUVA": {"id": "56a2a30f-5608-4798-90bb-2eef94a1628d"},
+    "VENUS": {"id": "c4443e4a-6ad5-4fc9-926c-5a73844b4530"},
+}
+
+# ==================== FORMAT ====================
 
 def format_number(value):
     try:
@@ -56,7 +70,7 @@ def format_number(value):
     except:
         return "0 TL"
 
-# ==================== PANEL VERI CEKME ====================
+# ==================== PANEL VERI ====================
 
 async def fetch_site_data(session, reports_url, csrf, site_id, today):
     async with session.post(
@@ -81,13 +95,17 @@ async def fetch_site_data(session, reports_url, csrf, site_id, today):
             "cek_adet": int(wth[2] or 0)
         }
 
-async def fetch_panel(panel_url, username, password, sites):
+async def fetch_panel(panel_url, username, password, sites, use_reports_plural=True):
+
+    if not panel_url or not username or not password:
+        return {}
+
     ssl_ctx = ssl.create_default_context()
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
 
     login_url = f"{panel_url}/login"
-    reports_url = f"{panel_url}/reports/quickly"
+    reports_url = f"{panel_url}/{'reports' if use_reports_plural else 'report'}/quickly"
 
     connector = aiohttp.TCPConnector(ssl=ssl_ctx)
     async with aiohttp.ClientSession(connector=connector) as session:
@@ -110,15 +128,16 @@ async def fetch_panel(panel_url, username, password, sites):
 
         today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
 
-        results = {}
-        for name, info in sites.items():
-            results[name] = await fetch_site_data(
-                session, reports_url, csrf, info["id"], today
-            )
+        tasks = [
+            fetch_site_data(session, reports_url, csrf, info["id"], today)
+            for info in sites.values()
+        ]
 
-        return results
+        values = await asyncio.gather(*tasks)
 
-# ==================== TELEGRAM KOMUTLARI ====================
+        return dict(zip(sites.keys(), values))
+
+# ==================== TELEGRAM ====================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -131,31 +150,27 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("⏳ Veriler çekiliyor...")
 
     try:
-        berlin = await fetch_panel(
-            PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, PANEL1_SITES
-        )
-        madrid = await fetch_panel(
-            PANEL2_URL, PANEL2_USERNAME, PANEL2_PASSWORD, PANEL2_SITES
-        )
+        berlin = await fetch_panel(PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, PANEL1_SITES, True)
+        madrid = await fetch_panel(PANEL2_URL, PANEL2_USERNAME, PANEL2_PASSWORD, PANEL2_SITES, True)
+        venus = await fetch_panel(VENUS_URL, VENUS_USERNAME, VENUS_PASSWORD, VENUS_SITES, False)
 
         today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
         text = f"*{today}*\n\n"
 
-        text += "📊 *BERLİN*\n\n"
-        for k, v in berlin.items():
-            text += (
-                f"{k}\n"
-                f"Yat: {format_number(v['yat'])} ({v['yat_adet']} adet)\n"
-                f"Çek: {format_number(v['cek'])} ({v['cek_adet']} adet)\n\n"
-            )
+        if berlin:
+            text += "📊 *BERLİN*\n\n"
+            for k, v in berlin.items():
+                text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']} adet)\nÇek: {format_number(v['cek'])} ({v['cek_adet']} adet)\n\n"
 
-        text += "📊 *MADRİD*\n\n"
-        for k, v in madrid.items():
-            text += (
-                f"{k}\n"
-                f"Yat: {format_number(v['yat'])} ({v['yat_adet']} adet)\n"
-                f"Çek: {format_number(v['cek'])} ({v['cek_adet']} adet)\n\n"
-            )
+        if madrid:
+            text += "📊 *MADRİD*\n\n"
+            for k, v in madrid.items():
+                text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']} adet)\nÇek: {format_number(v['cek'])} ({v['cek_adet']} adet)\n\n"
+
+        if venus:
+            text += "📊 *VENUS*\n\n"
+            for k, v in venus.items():
+                text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']} adet)\nÇek: {format_number(v['cek'])} ({v['cek_adet']} adet)\n\n"
 
         await msg.edit_text(text, parse_mode="Markdown")
 
