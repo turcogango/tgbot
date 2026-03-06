@@ -44,7 +44,6 @@ TRON_API_URL = "https://apilist.tronscan.org/api/account"
 
 PANEL1_SITES = {
     "BERLİN": {"id": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10"},
-     "NOWPAY": {"id": "e527cf5c-e379-4f84-8ff4-89580d23b970"},
     "WinPanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d"},
     "JaguarPanel": {"id": "698e467b-a871-4e18-978e-3d70adc534f4"},
 }
@@ -52,6 +51,7 @@ PANEL1_SITES = {
 PANEL2_SITES = {
     "777Havale": {"id": "b8576d7f-fc11-47d3-9e6f-07e052308221"},
     "7pay-TİKSO": {"id": "fa2009f2-8197-48d6-aa4f-dc6f65be7da9"},
+     "NOWPAY": {"id": "a66f2022-4874-465c-a60d-644e616ab379"},
 }
 
 VENUS_SITES = {
