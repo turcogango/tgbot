@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Telegram Bot - BERLİN & VENUS - Railway Uyumlu Stabil
+# Telegram Bot - BERLİN & VENUS - Toplam Hesaplı
 
 import os
 import ssl
@@ -17,12 +17,10 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# PANEL 1 -> BERLİN
 PANEL1_URL = os.getenv("PANEL_URL")
 PANEL1_USERNAME = os.getenv("USERNAME")
 PANEL1_PASSWORD = os.getenv("PASSWORD")
 
-# PANEL 3 -> VENUS
 VENUS_URL = os.getenv("VENUS_URL")
 VENUS_USERNAME = os.getenv("VENUS_USERNAME")
 VENUS_PASSWORD = os.getenv("VENUS_PASSWORD")
@@ -131,13 +129,6 @@ async def fetch_panel(panel_url, username, password, sites, use_reports_plural=T
 
 # ==================== TELEGRAM ====================
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🤖 Veri Bot\n\n"
-        "/veri - Günlük panel verileri\n"
-        "/tether - TRX & USDT bakiyesi"
-    )
-
 async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("⏳ Veriler çekiliyor...")
 
@@ -148,15 +139,29 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
         text = f"*{today}*\n\n"
 
+        total_yat = 0
+        total_cek = 0
+
         if berlin:
             text += "📊 *BERLİN*\n\n"
             for k, v in berlin.items():
+                total_yat += v['yat']
+                total_cek += v['cek']
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']} adet)\nÇek: {format_number(v['cek'])} ({v['cek_adet']} adet)\n\n"
 
         if venus:
             text += "📊 *VENUS*\n\n"
             for k, v in venus.items():
+                total_yat += v['yat']
+                total_cek += v['cek']
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']} adet)\nÇek: {format_number(v['cek'])} ({v['cek_adet']} adet)\n\n"
+
+        fark = total_yat - total_cek
+
+        text += "📈 *GENEL TOPLAM*\n\n"
+        text += f"Toplam Yatırım: {format_number(total_yat)}\n"
+        text += f"Toplam Çekim: {format_number(total_cek)}\n"
+        text += f"Net (Fark): {format_number(fark)}\n"
 
         await msg.edit_text(text, parse_mode="Markdown")
 
@@ -164,39 +169,11 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("HATA:", e)
         await msg.edit_text("❌ Veri alınamadı")
 
-async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = await update.message.reply_text("⏳ Hesaplanıyor...")
-
-    try:
-        r = requests.get(TRON_API_URL, params={"address": TRX_ADDRESS}, timeout=10)
-        data = r.json()
-
-        trx = data.get("balance", 0) / 1_000_000
-        usdt = 0.0
-
-        for t in data.get("trc20token_balances", []):
-            if t.get("tokenId") == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t":
-                usdt = int(t.get("balance", 0)) / 1_000_000
-
-        await msg.edit_text(
-            f"📍 {TRX_ADDRESS}\n"
-            f"⭐️ TRX: {trx:,.2f}\n"
-            f"⭐️ USDT: ${usdt:,.2f}"
-        )
-
-    except:
-        await msg.edit_text("❌ Bakiye okunamadı")
-
 # ==================== MAIN ====================
 
 def main():
-    print("🤖 Veri Bot başlatıldı")
     app = Application.builder().token(BOT_TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("veri", veri))
-    app.add_handler(CommandHandler("tether", tether))
-
     app.run_polling()
 
 if __name__ == "__main__":
