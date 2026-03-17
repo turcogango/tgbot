@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Telegram Bot - BERLİN & MADRİD & VENUS - Railway Uyumlu Stabil
+# Telegram Bot - BERLİN & VENUS - Railway Uyumlu Stabil
 
 import os
 import ssl
@@ -22,11 +22,6 @@ PANEL1_URL = os.getenv("PANEL_URL")
 PANEL1_USERNAME = os.getenv("USERNAME")
 PANEL1_PASSWORD = os.getenv("PASSWORD")
 
-# PANEL 2 -> MADRİD
-PANEL2_URL = os.getenv("PANEL2_URL")
-PANEL2_USERNAME = os.getenv("PANEL2_USERNAME")
-PANEL2_PASSWORD = os.getenv("PANEL2_PASSWORD")
-
 # PANEL 3 -> VENUS
 VENUS_URL = os.getenv("VENUS_URL")
 VENUS_USERNAME = os.getenv("VENUS_USERNAME")
@@ -48,12 +43,6 @@ PANEL1_SITES = {
     "JaguarPanel": {"id": "698e467b-a871-4e18-978e-3d70adc534f4"},
 }
 
-PANEL2_SITES = {
-    "777Havale": {"id": "b8576d7f-fc11-47d3-9e6f-07e052308221"},
-    "7pay-TİKSO": {"id": "fa2009f2-8197-48d6-aa4f-dc6f65be7da9"},
-     "NOWPAY": {"id": "a66f2022-4874-465c-a60d-644e616ab379"},
-}
-
 VENUS_SITES = {
     "B": {"id": "9d282a4b-9664-4467-a53e-6b774cbf6d01"},
     "W": {"id": "48bedac9-2d1b-4a96-b736-e55de3fba453"},
@@ -61,8 +50,7 @@ VENUS_SITES = {
     "O": {"id": "d45c6fc9-bedd-4e3a-be0d-57aad4f958ea"},
     "MİLOS": {"id": "527863a6-cf8e-438e-8979-d03da7eee6d3"},
     "BETOVİS": {"id": "d104651b-35f8-48e2-b0f4-862d70ee41fe"},
-    "TRUVA": {"id": "56a2a30f-5608-4798-90bb-2eef94a1628d"},
-    "VENUS": {"id": "c4443e4a-6ad5-4fc9-926c-5a73844b4530"},
+
 }
 
 # ==================== FORMAT ====================
@@ -155,7 +143,6 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         berlin = await fetch_panel(PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, PANEL1_SITES, True)
-        madrid = await fetch_panel(PANEL2_URL, PANEL2_USERNAME, PANEL2_PASSWORD, PANEL2_SITES, True)
         venus = await fetch_panel(VENUS_URL, VENUS_USERNAME, VENUS_PASSWORD, VENUS_SITES, False)
 
         today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
@@ -164,11 +151,6 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if berlin:
             text += "📊 *BERLİN*\n\n"
             for k, v in berlin.items():
-                text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']} adet)\nÇek: {format_number(v['cek'])} ({v['cek_adet']} adet)\n\n"
-
-        if madrid:
-            text += "📊 *MADRİD*\n\n"
-            for k, v in madrid.items():
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']} adet)\nÇek: {format_number(v['cek'])} ({v['cek_adet']} adet)\n\n"
 
         if venus:
