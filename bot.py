@@ -41,6 +41,7 @@ PANEL1_SITES = {
     "BERLİN": {"id": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10"},
     "WinPanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d"},
     "JaguarPanel": {"id": "698e467b-a871-4e18-978e-3d70adc534f4"},
+    "SarıPanel": {"id": "e1874a83-f456-490d-83ad-1dcc1e1b61e0"},
 }
 
 VENUS_SITES = {
