@@ -49,6 +49,7 @@ VENUS_SITES = {
     "W": {"id": "48bedac9-2d1b-4a96-b736-e55de3fba453"},
     "T": {"id": "dee8e5a2-38ad-4006-8ad9-c622471e9e69"},
     "O": {"id": "d45c6fc9-bedd-4e3a-be0d-57aad4f958ea"},
+    "JUMBO": {"id": "f685cc8d-e2a2-4d93-b4cb-b86d33b96e3f"},
     "MİLOS": {"id": "527863a6-cf8e-438e-8979-d03da7eee6d3"},
     "BETOVİS": {"id": "d104651b-35f8-48e2-b0f4-862d70ee41fe"},
 
