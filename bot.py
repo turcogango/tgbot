@@ -42,6 +42,10 @@ PANEL1_SITES = {
     "WinPanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d"},
     "JaguarPanel": {"id": "698e467b-a871-4e18-978e-3d70adc534f4"},
     "SarıPanel": {"id": "e1874a83-f456-490d-83ad-1dcc1e1b61e0"},
+    "Rİ": {"id": "12d991db-3ac3-4c63-9287-77b151cef14b"},
+    "Fİ": {"id": "22ce3da9-7214-488a-b762-e8edd5f694c3"},
+    "MX": {"id": "593f9e70-c9d3-4b3c-82ab-7abbdd9395bd"},
+    "BC": {"id": "84b7ddb0-0db2-4f8a-92d1-2fde08599286"},
 }
 
 VENUS_SITES = {
