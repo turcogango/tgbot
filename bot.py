@@ -32,7 +32,7 @@ if not BOT_TOKEN:
 
 # ==================== TRX ====================
 
-TRX_ADDRESS = "TSjQYavgJBGPr8iV3zH7qo1bx927qKVMwA"
+TRX_ADDRESS = "TDy4vHiBx9o6zwqD3TaCtSh3iioC6DUW1H"
 TRON_API_URL = "https://apilist.tronscan.org/api/account"
 
 # ==================== SITE ID'LER ====================
