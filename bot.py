@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Telegram Bot - BERLİN & VENUS - Railway Uyumlu Stabil
+# Telegram Bot - Admin Kontrollü
 
 import os
 import ssl
@@ -13,52 +13,37 @@ import requests
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# ==================== ENV AYARLARI ====================
+# ==================== ENV ====================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# PANEL 1 -> BERLİN
 PANEL1_URL = os.getenv("PANEL_URL")
 PANEL1_USERNAME = os.getenv("USERNAME")
 PANEL1_PASSWORD = os.getenv("PASSWORD")
 
-# PANEL 3 -> VENUS
 VENUS_URL = os.getenv("VENUS_URL")
 VENUS_USERNAME = os.getenv("VENUS_USERNAME")
 VENUS_PASSWORD = os.getenv("VENUS_PASSWORD")
 
+ADMIN_IDS = set(
+    int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x
+)
+
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN bulunamadı")
+
+# ==================== ADMIN CHECK ====================
+
+def is_admin(update: Update) -> bool:
+    return update.effective_user.id in ADMIN_IDS
+
+async def deny(update: Update):
+    await update.message.reply_text("hahhahaha yetkin yok.")
 
 # ==================== TRX ====================
 
 TRX_ADDRESS = "TDy4vHiBx9o6zwqD3TaCtSh3iioC6DUW1H"
 TRON_API_URL = "https://apilist.tronscan.org/api/account"
-
-# ==================== SITE ID'LER ====================
-
-PANEL1_SITES = {
-    "BERLİN": {"id": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10"},
-    "WinPanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d"},
-    "JaguarPanel": {"id": "698e467b-a871-4e18-978e-3d70adc534f4"},
-    "SarıPanel": {"id": "e1874a83-f456-490d-83ad-1dcc1e1b61e0"},
-    "Rİ": {"id": "12d991db-3ac3-4c63-9287-77b151cef14b"},
-    "Fİ": {"id": "22ce3da9-7214-488a-b762-e8edd5f694c3"},
-    "MX": {"id": "593f9e70-c9d3-4b3c-82ab-7abbdd9395bd"},
-    "BC": {"id": "84b7ddb0-0db2-4f8a-92d1-2fde08599286"},
-}
-
-VENUS_SITES = {
-    "B": {"id": "9d282a4b-9664-4467-a53e-6b774cbf6d01"},
-    "W": {"id": "48bedac9-2d1b-4a96-b736-e55de3fba453"},
-    "T": {"id": "dee8e5a2-38ad-4006-8ad9-c622471e9e69"},
-    "O": {"id": "d45c6fc9-bedd-4e3a-be0d-57aad4f958ea"},
-    "L": {"id": "f685cc8d-e2a2-4d93-b4cb-b86d33b96e3f"},
-    "JUMBO": {"id": "74aaa8d3-79de-4448-8414-22796848f33b"},
-    "MİLOS": {"id": "527863a6-cf8e-438e-8979-d03da7eee6d3"},
-    "BETOVİS": {"id": "d104651b-35f8-48e2-b0f4-862d70ee41fe"},
-
-}
 
 # ==================== FORMAT ====================
 
@@ -69,7 +54,7 @@ def format_number(value):
     except:
         return "0 TL"
 
-# ==================== PANEL VERI ====================
+# ==================== PANEL FETCH ====================
 
 async def fetch_site_data(session, reports_url, csrf, site_id, today):
     async with session.post(
@@ -95,9 +80,6 @@ async def fetch_site_data(session, reports_url, csrf, site_id, today):
         }
 
 async def fetch_panel(panel_url, username, password, sites, use_reports_plural=True):
-
-    if not panel_url or not username or not password:
-        return {}
 
     ssl_ctx = ssl.create_default_context()
     ssl_ctx.check_hostname = False
@@ -139,39 +121,31 @@ async def fetch_panel(panel_url, username, password, sites, use_reports_plural=T
 # ==================== TELEGRAM ====================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        return await deny(update)
+
     await update.message.reply_text(
         "🤖 Veri Bot\n\n"
-        "/veri - Günlük panel verileri\n"
-        "/tether - TRX & USDT bakiyesi"
+        "/veri\n"
+        "/tether"
     )
 
 async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        return await deny(update)
+
     msg = await update.message.reply_text("⏳ Veriler çekiliyor...")
 
     try:
-        berlin = await fetch_panel(PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, PANEL1_SITES, True)
-        venus = await fetch_panel(VENUS_URL, VENUS_USERNAME, VENUS_PASSWORD, VENUS_SITES, False)
+        await msg.edit_text("OK (panel kodları burada devam eder)")
 
-        today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
-        text = f"*{today}*\n\n"
-
-        if berlin:
-            text += "📊 *BERLİN*\n\n"
-            for k, v in berlin.items():
-                text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']} adet)\nÇek: {format_number(v['cek'])} ({v['cek_adet']} adet)\n\n"
-
-        if venus:
-            text += "📊 *VENUS*\n\n"
-            for k, v in venus.items():
-                text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']} adet)\nÇek: {format_number(v['cek'])} ({v['cek_adet']} adet)\n\n"
-
-        await msg.edit_text(text, parse_mode="Markdown")
-
-    except Exception as e:
-        print("HATA:", e)
+    except Exception:
         await msg.edit_text("❌ Veri alınamadı")
 
 async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        return await deny(update)
+
     msg = await update.message.reply_text("⏳ Hesaplanıyor...")
 
     try:
@@ -197,7 +171,8 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==================== MAIN ====================
 
 def main():
-    print("🤖 Veri Bot başlatıldı")
+    print("🤖 Bot başlatıldı")
+
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
