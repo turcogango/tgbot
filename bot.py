@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Telegram Bot - Admin Kontrollü
+# Telegram Bot - Admin Kontrollü Full Versiyon
 
 import os
 import ssl
@@ -25,14 +25,12 @@ VENUS_URL = os.getenv("VENUS_URL")
 VENUS_USERNAME = os.getenv("VENUS_USERNAME")
 VENUS_PASSWORD = os.getenv("VENUS_PASSWORD")
 
-ADMIN_IDS = set(
-    int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x
-)
+ADMIN_IDS = set(int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x)
 
 if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN bulunamadı")
 
-# ==================== ADMIN CHECK ====================
+# ==================== ADMIN ====================
 
 def is_admin(update: Update) -> bool:
     return update.effective_user.id in ADMIN_IDS
@@ -54,7 +52,7 @@ def format_number(value):
     except:
         return "0 TL"
 
-# ==================== PANEL FETCH ====================
+# ==================== PANEL ====================
 
 async def fetch_site_data(session, reports_url, csrf, site_id, today):
     async with session.post(
@@ -89,12 +87,13 @@ async def fetch_panel(panel_url, username, password, sites, use_reports_plural=T
     reports_url = f"{panel_url}/{'reports' if use_reports_plural else 'report'}/quickly"
 
     connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+
     async with aiohttp.ClientSession(connector=connector) as session:
 
         async with session.get(login_url) as r:
             soup = BeautifulSoup(await r.text(), "html.parser")
-            token_input = soup.find("input", {"name": "_token"})
-            token = token_input["value"] if token_input else ""
+            token = soup.find("input", {"name": "_token"})
+            token = token["value"] if token else ""
 
         await session.post(login_url, data={
             "_token": token,
@@ -118,17 +117,13 @@ async def fetch_panel(panel_url, username, password, sites, use_reports_plural=T
 
         return dict(zip(sites.keys(), values))
 
-# ==================== TELEGRAM ====================
+# ==================== BOT ====================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return await deny(update)
 
-    await update.message.reply_text(
-        "🤖 Veri Bot\n\n"
-        "/veri\n"
-        "/tether"
-    )
+    await update.message.reply_text("🤖 Veri Bot\n\n/veri\n/tether")
 
 async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
@@ -137,9 +132,45 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("⏳ Veriler çekiliyor...")
 
     try:
-        await msg.edit_text("OK (panel kodları burada devam eder)")
+        berlin = await fetch_panel(PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, {
+            "BERLİN": {"id": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10"},
+            "WinPanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d"},
+            "JaguarPanel": {"id": "698e467b-a871-4e18-978e-3d70adc534f4"},
+            "SarıPanel": {"id": "e1874a83-f456-490d-83ad-1dcc1e1b61e0"},
+            "Rİ": {"id": "12d991db-3ac3-4c63-9287-77b151cef14b"},
+            "Fİ": {"id": "22ce3da9-7214-488a-b762-e8edd5f694c3"},
+            "MX": {"id": "593f9e70-c9d3-4b3c-82ab-7abbdd9395bd"},
+            "BC": {"id": "84b7ddb0-0db2-4f8a-92d1-2fde08599286"},
+        }, True)
 
-    except Exception:
+        venus = await fetch_panel(VENUS_URL, VENUS_USERNAME, VENUS_PASSWORD, {
+            "B": {"id": "9d282a4b-9664-4467-a53e-6b774cbf6d01"},
+            "W": {"id": "48bedac9-2d1b-4a96-b736-e55de3fba453"},
+            "T": {"id": "dee8e5a2-38ad-4006-8ad9-c622471e9e69"},
+            "O": {"id": "d45c6fc9-bedd-4e3a-be0d-57aad4f958ea"},
+            "L": {"id": "f685cc8d-e2a2-4d93-b4cb-b86d33b96e3f"},
+            "JUMBO": {"id": "74aaa8d3-79de-4448-8414-22796848f33b"},
+            "MİLOS": {"id": "527863a6-cf8e-438e-8979-d03da7eee6d3"},
+            "BETOVİS": {"id": "d104651b-35f8-48e2-b0f4-862d70ee41fe"},
+        }, False)
+
+        today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
+        text = f"*{today}*\n\n"
+
+        if berlin:
+            text += "📊 BERLİN\n\n"
+            for k, v in berlin.items():
+                text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
+
+        if venus:
+            text += "📊 VENUS\n\n"
+            for k, v in venus.items():
+                text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
+
+        await msg.edit_text(text, parse_mode="Markdown")
+
+    except Exception as e:
+        print(e)
         await msg.edit_text("❌ Veri alınamadı")
 
 async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -153,7 +184,7 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = r.json()
 
         trx = data.get("balance", 0) / 1_000_000
-        usdt = 0.0
+        usdt = 0
 
         for t in data.get("trc20token_balances", []):
             if t.get("tokenId") == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t":
@@ -161,8 +192,8 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await msg.edit_text(
             f"📍 {TRX_ADDRESS}\n"
-            f"⭐️ TRX: {trx:,.2f}\n"
-            f"⭐️ USDT: ${usdt:,.2f}"
+            f"TRX: {trx:,.2f}\n"
+            f"USDT: ${usdt:,.2f}"
         )
 
     except:
@@ -171,8 +202,6 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==================== MAIN ====================
 
 def main():
-    print("🤖 Bot başlatıldı")
-
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
