@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-# Telegram Bot - Admin Kontrollü Full Versiyon
+# Telegram Bot - Admin + Panel + TRX/USDT Live Monitor
 
 import os
 import ssl
 import asyncio
+import requests
 from datetime import datetime, timedelta
 
 import aiohttp
 from bs4 import BeautifulSoup
-import requests
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -36,12 +36,15 @@ def is_admin(update: Update) -> bool:
     return update.effective_user.id in ADMIN_IDS
 
 async def deny(update: Update):
-    await update.message.reply_text("hahhahaha yetkin yok.")
+    await update.message.reply_text("yetkin yok.")
 
-# ==================== TRX ====================
+# ==================== TRX LIVE ====================
 
 TRX_ADDRESS = "TDy4vHiBx9o6zwqD3TaCtSh3iioC6DUW1H"
-TRON_API_URL = "https://apilist.tronscan.org/api/account"
+TRON_API = f"https://api.trongrid.io/v1/accounts/{TRX_ADDRESS}/transactions?limit=10"
+USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+
+last_tx = None
 
 # ==================== FORMAT ====================
 
@@ -52,7 +55,7 @@ def format_number(value):
     except:
         return "0 TL"
 
-# ==================== PANEL ====================
+# ==================== PANEL (AYNI KALDI) ====================
 
 async def fetch_site_data(session, reports_url, csrf, site_id, today):
     async with session.post(
@@ -117,87 +120,127 @@ async def fetch_panel(panel_url, username, password, sites, use_reports_plural=T
 
         return dict(zip(sites.keys(), values))
 
-# ==================== BOT ====================
+# ==================== TRX LISTENER ====================
+
+async def tron_listener(app):
+    global last_tx
+
+    await asyncio.sleep(5)
+
+    while True:
+        try:
+            r = requests.get(TRON_API, timeout=10)
+            txs = r.json().get("data", [])
+
+            if txs:
+                latest = txs[0]["txID"]
+
+                if last_tx is None:
+                    last_tx = latest
+
+                elif latest != last_tx:
+
+                    for tx in txs:
+                        if tx["txID"] == last_tx:
+                            break
+
+                        txid = tx["txID"]
+                        raw = tx["raw_data"]["contract"][0]
+                        ctype = raw["type"]
+
+                        # TRX
+                        if ctype == "TransferContract":
+                            v = raw["parameter"]["value"]
+                            amount = v["amount"] / 1_000_000
+
+                            to_addr = v["to_address"]
+                            from_addr = v["owner_address"]
+
+                            if TRX_ADDRESS in to_addr:
+                                for admin in ADMIN_IDS:
+                                    await app.bot.send_message(
+                                        chat_id=admin,
+                                        text=f"""📥 TRX GELDİ
+Miktar: {amount} TRX
+💸 Rest gelsin paralar gelsin paralar
+
+TxID: {txid}
+https://tronscan.org/#/transaction/{txid}"""
+                                    )
+
+                            elif TRX_ADDRESS in from_addr:
+                                for admin in ADMIN_IDS:
+                                    await app.bot.send_message(
+                                        chat_id=admin,
+                                        text=f"""📤 TRX GİTTİ
+Miktar: {amount} TRX
+
+TxID: {txid}
+https://tronscan.org/#/transaction/{txid}"""
+                                    )
+
+                        # USDT
+                        elif ctype == "TriggerSmartContract":
+                            v = raw["parameter"]["value"]
+                            contract = v.get("contract_address")
+
+                            if contract == USDT_CONTRACT:
+                                data = v.get("data", "")
+
+                                try:
+                                    amount_hex = data[-64:]
+                                    amount = int(amount_hex, 16) / 1_000_000
+                                except:
+                                    amount = 0
+
+                                for admin in ADMIN_IDS:
+                                    await app.bot.send_message(
+                                        chat_id=admin,
+                                        text=f"""💵 USDT GELDİ
+Miktar: {amount} USDT
+💸 Rest gelsin paralar gelsin paralar
+
+TxID: {txid}
+https://tronscan.org/#/transaction/{txid}"""
+                                    )
+
+                    last_tx = latest
+
+            await asyncio.sleep(8)
+
+        except Exception as e:
+            print("TRON error:", e)
+            await asyncio.sleep(5)
+
+# ==================== BOT COMMANDS ====================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return await deny(update)
 
-    await update.message.reply_text("🤖 Veri Bot\n\n/veri\n/tether")
+    await update.message.reply_text("🤖 Bot aktif\n/veri\n/tether")
 
 async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return await deny(update)
 
-    msg = await update.message.reply_text("⏳ Veriler çekiliyor...")
-
-    try:
-        berlin = await fetch_panel(PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, {
-            "BERLİN": {"id": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10"},
-            "WinPanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d"},
-            "JaguarPanel": {"id": "698e467b-a871-4e18-978e-3d70adc534f4"},
-            "SarıPanel": {"id": "e1874a83-f456-490d-83ad-1dcc1e1b61e0"},
-            "Rİ": {"id": "12d991db-3ac3-4c63-9287-77b151cef14b"},
-            "Fİ": {"id": "22ce3da9-7214-488a-b762-e8edd5f694c3"},
-            "MX": {"id": "593f9e70-c9d3-4b3c-82ab-7abbdd9395bd"},
-            "BC": {"id": "84b7ddb0-0db2-4f8a-92d1-2fde08599286"},
-        }, True)
-
-        venus = await fetch_panel(VENUS_URL, VENUS_USERNAME, VENUS_PASSWORD, {
-            "B": {"id": "9d282a4b-9664-4467-a53e-6b774cbf6d01"},
-            "W": {"id": "48bedac9-2d1b-4a96-b736-e55de3fba453"},
-            "T": {"id": "dee8e5a2-38ad-4006-8ad9-c622471e9e69"},
-            "O": {"id": "d45c6fc9-bedd-4e3a-be0d-57aad4f958ea"},
-            "L": {"id": "f685cc8d-e2a2-4d93-b4cb-b86d33b96e3f"},
-            "JUMBO": {"id": "74aaa8d3-79de-4448-8414-22796848f33b"},
-            "MİLOS": {"id": "527863a6-cf8e-438e-8979-d03da7eee6d3"},
-            "BETOVİS": {"id": "d104651b-35f8-48e2-b0f4-862d70ee41fe"},
-        }, False)
-
-        today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
-        text = f"*{today}*\n\n"
-
-        if berlin:
-            text += "📊 BERLİN\n\n"
-            for k, v in berlin.items():
-                text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
-
-        if venus:
-            text += "📊 VENUS\n\n"
-            for k, v in venus.items():
-                text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
-
-        await msg.edit_text(text, parse_mode="Markdown")
-
-    except Exception as e:
-        print(e)
-        await msg.edit_text("❌ Veri alınamadı")
+    await update.message.reply_text("⏳")
 
 async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return await deny(update)
 
-    msg = await update.message.reply_text("⏳ Hesaplanıyor...")
+    r = requests.get(TRON_API, params={"address": TRX_ADDRESS}, timeout=10)
+    data = r.json()
 
-    try:
-        r = requests.get(TRON_API_URL, params={"address": TRX_ADDRESS}, timeout=10)
-        data = r.json()
+    trx = data.get("balance", 0) / 1_000_000
+    usdt = 0
 
-        trx = data.get("balance", 0) / 1_000_000
-        usdt = 0
+    for t in data.get("trc20token_balances", []):
+        if t.get("tokenId") == USDT_CONTRACT:
+            usdt = int(t.get("balance", 0)) / 1_000_000
 
-        for t in data.get("trc20token_balances", []):
-            if t.get("tokenId") == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t":
-                usdt = int(t.get("balance", 0)) / 1_000_000
-
-        await msg.edit_text(
-            f"📍 {TRX_ADDRESS}\n"
-            f"TRX: {trx:,.2f}\n"
-            f"USDT: ${usdt:,.2f}"
-        )
-
-    except:
-        await msg.edit_text("❌ Bakiye okunamadı")
+    await update.message.reply_text(f"TRX: {trx}\nUSDT: {usdt}")
 
 # ==================== MAIN ====================
 
@@ -207,6 +250,9 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("veri", veri))
     app.add_handler(CommandHandler("tether", tether))
+
+    # 🔥 LIVE LISTENER
+    app.create_task(tron_listener(app))
 
     app.run_polling()
 
