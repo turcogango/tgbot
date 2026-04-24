@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Telegram Bot - Admin + Panel + TRX/USDT Live Monitor (FIXED)
+# Telegram Bot - Admin + Panel + TRX/USDT Stable Version
 
 import os
 import ssl
@@ -35,8 +35,11 @@ if not BOT_TOKEN:
 def is_admin(update: Update) -> bool:
     return update.effective_user.id in ADMIN_IDS
 
-async def deny(update: Update):
-    await update.message.reply_text("yetkin yok.")
+async def deny(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="yetkin yok."
+    )
 
 # ==================== TRX ====================
 
@@ -138,7 +141,7 @@ https://tronscan.org/#/transaction/{txid}"""
             print("TRON error:", e)
             await asyncio.sleep(5)
 
-# ==================== PANEL (DEĞİŞMEDİ) ====================
+# ==================== PANEL (AYNI) ====================
 
 def format_number(value):
     try:
@@ -147,23 +150,29 @@ def format_number(value):
     except:
         return "0 TL"
 
-# (senin panel fonksiyonların aynen kaldı)
-
 # ==================== COMMANDS ====================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
-        return await deny(update)
-    await update.message.reply_text("🤖 Bot aktif")
+        return await deny(update, context)
+
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🤖 Bot aktif"
+    )
 
 async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
-        return await deny(update)
-    await update.message.reply_text("⏳")
+        return await deny(update, context)
+
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="⏳"
+    )
 
 async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
-        return await deny(update)
+        return await deny(update, context)
 
     r = requests.get(TRON_API, params={"address": TRX_ADDRESS}, timeout=10)
     data = r.json()
@@ -175,9 +184,12 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if t.get("tokenId") == USDT_CONTRACT:
             usdt = int(t.get("balance", 0)) / 1_000_000
 
-    await update.message.reply_text(f"TRX: {trx}\nUSDT: {usdt}")
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"TRX: {trx}\nUSDT: {usdt}"
+    )
 
-# ==================== FIX: POST_INIT ====================
+# ==================== POST INIT ====================
 
 async def post_init(app):
     app.create_task(tron_listener(app))
