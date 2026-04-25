@@ -141,6 +141,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Fİ": {"id": "22ce3da9-7214-488a-b762-e8edd5f694c3"},
             "MX": {"id": "593f9e70-c9d3-4b3c-82ab-7abbdd9395bd"},
             "BC": {"id": "84b7ddb0-0db2-4f8a-92d1-2fde08599286"},
+            "SEYHUN": {"id": "976b9d82-1346-4c85-9271-a2a02b552aab"},
         }, True)
 
         venus = await fetch_panel(VENUS_URL, VENUS_USERNAME, VENUS_PASSWORD, {
