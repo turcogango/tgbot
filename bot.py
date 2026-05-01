@@ -158,15 +158,39 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
         text = f"*{today}*\n\n"
 
+        total_yat = 0
+        total_cek = 0
+        total_yat_adet = 0
+        total_cek_adet = 0
+
         if berlin:
             text += "📊 BERLİN\n\n"
             for k, v in berlin.items():
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
 
+                total_yat += float(v['yat'])
+                total_cek += float(v['cek'])
+                total_yat_adet += v['yat_adet']
+                total_cek_adet += v['cek_adet']
+
         if venus:
             text += "📊 VENUS\n\n"
             for k, v in venus.items():
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
+
+                total_yat += float(v['yat'])
+                total_cek += float(v['cek'])
+                total_yat_adet += v['yat_adet']
+                total_cek_adet += v['cek_adet']
+
+        # ==================== GENEL TOPLAM ====================
+        net = total_yat - total_cek
+        emoji = "🟢" if net >= 0 else "🔴"
+
+        text += "💰 *GENEL TOPLAM*\n\n"
+        text += f"Yatırım: {format_number(total_yat)} ({total_yat_adet})\n"
+        text += f"Çekim: {format_number(total_cek)} ({total_cek_adet})\n"
+        text += f"Fark: {emoji} {format_number(net)}\n"
 
         await msg.edit_text(text, parse_mode="Markdown")
 
