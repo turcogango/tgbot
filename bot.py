@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Telegram Bot - Admin Kontrollü Full Versiyon (FIXED)
+# Telegram Bot - FIXED (NoneType safe + BERLİN TOTAL)
 
 import os
 import ssl
@@ -43,7 +43,13 @@ async def deny(update: Update):
 TRX_ADDRESS = "TDy4vHiBx9o6zwqD3TaCtSh3iioC6DUW1H"
 TRON_API_URL = "https://apilist.tronscan.org/api/account"
 
-# ==================== FORMAT ====================
+# ==================== SAFE ====================
+
+def safe_float(val):
+    try:
+        return float(val if val is not None else 0)
+    except:
+        return 0.0
 
 def format_number(value):
     try:
@@ -51,12 +57,6 @@ def format_number(value):
         return f"{num:,}".replace(",", ".") + " TL"
     except:
         return "0 TL"
-
-def safe_float(val):
-    try:
-        return float(val or 0)
-    except:
-        return 0.0
 
 # ==================== PANEL ====================
 
@@ -78,9 +78,9 @@ async def fetch_site_data(session, reports_url, csrf, site_id, today):
         wth = data.get("withdraw") or [0, 0, 0]
 
         return {
-            "yat": safe_float(dep[0]),
+            "yat": safe_float(dep[0] if len(dep) > 0 else 0),
             "yat_adet": int(dep[2] or 0) if len(dep) > 2 else 0,
-            "cek": safe_float(wth[0]),
+            "cek": safe_float(wth[0] if len(wth) > 0 else 0),
             "cek_adet": int(wth[2] or 0) if len(wth) > 2 else 0
         }
 
@@ -164,8 +164,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
         text = f"{today}\n\n"
 
-        # ==================== DETAY ====================
-
+        # DETAY
         if berlin:
             text += "BERLİN\n\n"
             for k, v in berlin.items():
@@ -176,8 +175,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for k, v in venus.items():
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
 
-        # ==================== BERLİN TOPLAM ====================
-
+        # BERLİN TOPLAM
         b_yat = 0
         b_cek = 0
         b_yat_adet = 0
@@ -185,10 +183,10 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if berlin:
             for v in berlin.values():
-                b_yat += v["yat"]
-                b_cek += v["cek"]
-                b_yat_adet += v["yat_adet"]
-                b_cek_adet += v["cek_adet"]
+                b_yat += v["yat"] or 0
+                b_cek += v["cek"] or 0
+                b_yat_adet += v["yat_adet"] or 0
+                b_cek_adet += v["cek_adet"] or 0
 
         net = b_yat - b_cek
         emoji = "🟢" if net >= 0 else "🔴"
