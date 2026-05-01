@@ -47,12 +47,18 @@ TRON_API_URL = "https://apilist.tronscan.org/api/account"
 
 def format_number(value):
     try:
-        num = int(float(value))
+        num = int(float(value or 0))
         return f"{num:,}".replace(",", ".") + " TL"
     except:
         return "0 TL"
 
 # ==================== PANEL ====================
+
+def safe_float(val):
+    try:
+        return float(val)
+    except:
+        return 0.0
 
 async def fetch_site_data(session, reports_url, csrf, site_id, today):
     async with session.post(
@@ -67,13 +73,14 @@ async def fetch_site_data(session, reports_url, csrf, site_id, today):
         }
     ) as r:
         data = await r.json()
+
         dep = data.get("deposit", [0, 0, 0])
         wth = data.get("withdraw", [0, 0, 0])
 
         return {
-            "yat": dep[0],
+            "yat": safe_float(dep[0]),
             "yat_adet": int(dep[2] or 0),
-            "cek": wth[0],
+            "cek": safe_float(wth[0]),
             "cek_adet": int(wth[2] or 0)
         }
 
@@ -114,7 +121,6 @@ async def fetch_panel(panel_url, username, password, sites, use_reports_plural=T
         ]
 
         values = await asyncio.gather(*tasks)
-
         return dict(zip(sites.keys(), values))
 
 # ==================== BOT ====================
@@ -168,8 +174,8 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for k, v in berlin.items():
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
 
-                total_yat += float(v['yat'])
-                total_cek += float(v['cek'])
+                total_yat += v['yat']
+                total_cek += v['cek']
                 total_yat_adet += v['yat_adet']
                 total_cek_adet += v['cek_adet']
 
@@ -178,12 +184,11 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for k, v in venus.items():
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
 
-                total_yat += float(v['yat'])
-                total_cek += float(v['cek'])
+                total_yat += v['yat']
+                total_cek += v['cek']
                 total_yat_adet += v['yat_adet']
                 total_cek_adet += v['cek_adet']
 
-        # ==================== GENEL TOPLAM ====================
         net = total_yat - total_cek
         emoji = "🟢" if net >= 0 else "🔴"
 
