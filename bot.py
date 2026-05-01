@@ -174,7 +174,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for k, v in venus.items():
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
 
-        # ==================== BERLİN GENEL TOPLAM ====================
+        # ==================== BERLİN GENEL TOPLAM + TESLİMAT ====================
 
         b_yat = 0
         b_cek = 0
@@ -188,13 +188,16 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 b_yat_adet += v["yat_adet"] or 0
                 b_cek_adet += v["cek_adet"] or 0
 
-        net = b_yat - b_cek
+        teslimat = 0  # 🔥 gizli gider (istersen burayı değiştir)
+
+        net = b_yat - b_cek - teslimat
         emoji = "🟢" if net >= 0 else "🔴"
 
         text += "\n━━━━━━━━━━━━━━\n"
         text += "💰 BERLİN GENEL TOPLAM\n\n"
         text += f"Yatırım: {format_number(b_yat)} ({b_yat_adet})\n"
         text += f"Çekim: {format_number(b_cek)} ({b_cek_adet})\n"
+        text += f"Teslimat: {format_number(teslimat)}\n"
         text += f"Fark: {emoji} {format_number(net)}\n"
 
         await msg.edit_text(text, parse_mode="Markdown")
