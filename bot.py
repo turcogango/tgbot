@@ -36,7 +36,7 @@ def is_admin(update: Update) -> bool:
     return update.effective_user.id in ADMIN_IDS
 
 async def deny(update: Update):
-    await update.message.reply_text("yetkin yok.")
+    await update.message.reply_text("hahhahaha yetkin yok.")
 
 # ==================== TRX ====================
 
@@ -47,16 +47,10 @@ TRON_API_URL = "https://apilist.tronscan.org/api/account"
 
 def format_number(value):
     try:
-        num = int(float(value or 0))
+        num = int(float(value))
         return f"{num:,}".replace(",", ".") + " TL"
     except:
         return "0 TL"
-
-def safe(v):
-    try:
-        return float(v or 0)
-    except:
-        return 0.0
 
 # ==================== PANEL ====================
 
@@ -73,15 +67,14 @@ async def fetch_site_data(session, reports_url, csrf, site_id, today):
         }
     ) as r:
         data = await r.json()
-
-        dep = data.get("deposit") or [0, 0, 0]
-        wth = data.get("withdraw") or [0, 0, 0]
+        dep = data.get("deposit", [0, 0, 0])
+        wth = data.get("withdraw", [0, 0, 0])
 
         return {
-            "yat": safe(dep[0] if len(dep) > 0 else 0),
-            "yat_adet": int(dep[2] or 0) if len(dep) > 2 else 0,
-            "cek": safe(wth[0] if len(wth) > 0 else 0),
-            "cek_adet": int(wth[2] or 0) if len(wth) > 2 else 0
+            "yat": dep[0],
+            "yat_adet": int(dep[2] or 0),
+            "cek": wth[0],
+            "cek_adet": int(wth[2] or 0)
         }
 
 async def fetch_panel(panel_url, username, password, sites, use_reports_plural=True):
@@ -121,6 +114,7 @@ async def fetch_panel(panel_url, username, password, sites, use_reports_plural=T
         ]
 
         values = await asyncio.gather(*tasks)
+
         return dict(zip(sites.keys(), values))
 
 # ==================== BOT ====================
@@ -128,13 +122,14 @@ async def fetch_panel(panel_url, username, password, sites, use_reports_plural=T
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return await deny(update)
-    await update.message.reply_text("veri bot")
+
+    await update.message.reply_text("🤖 Veri Bot\n\n/veri\n/tether")
 
 async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return await deny(update)
 
-    msg = await update.message.reply_text("çekiliyor...")
+    msg = await update.message.reply_text("⏳ Veriler çekiliyor...")
 
     try:
         berlin = await fetch_panel(PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, {
@@ -149,7 +144,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "SKODA": {"id": "976b9d82-1346-4c85-9271-a2a02b552aab"},
         }, True)
 
-        venus = await fetch_panel(PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, {
+        venus = await fetch_panel(VENUS_URL, VENUS_USERNAME, VENUS_PASSWORD, {
             "B": {"id": "9d282a4b-9664-4467-a53e-6b774cbf6d01"},
             "W": {"id": "48bedac9-2d1b-4a96-b736-e55de3fba453"},
             "T": {"id": "dee8e5a2-38ad-4006-8ad9-c622471e9e69"},
@@ -161,53 +156,59 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }, False)
 
         today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
-        text = f"{today}\n\n"
+        text = f"*{today}*\n\n"
 
         if berlin:
-            text += "BERLİN\n\n"
+            text += "📊 BERLİN\n\n"
             for k, v in berlin.items():
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
 
         if venus:
-            text += "VENUS\n\n"
+            text += "📊 VENUS\n\n"
             for k, v in venus.items():
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
 
-        # ==================== BERLİN GENEL TOPLAM ====================
-
-        b_yat = 0
-        b_cek = 0
-        b_yat_adet = 0
-        b_cek_adet = 0
-
-        if berlin:
-            for v in berlin.values():
-                b_yat += v["yat"] or 0
-                b_cek += v["cek"] or 0
-                b_yat_adet += v["yat_adet"] or 0
-                b_cek_adet += v["cek_adet"] or 0
-
-        net = b_yat - b_cek
-        emoji = "🟢" if net >= 0 else "🔴"
-
-        text += "\n━━━━━━━━━━━━━━\n"
-        text += "💰 BERLİN GENEL TOPLAM\n\n"
-        text += f"Yatırım: {format_number(b_yat)} ({b_yat_adet})\n"
-        text += f"Çekim: {format_number(b_cek)} ({b_cek_adet})\n"
-        text += f"Fark: {emoji} {format_number(net)}\n"
-
-        await msg.edit_text(text)
+        await msg.edit_text(text, parse_mode="Markdown")
 
     except Exception as e:
         print(e)
-        await msg.edit_text("hata")
+        await msg.edit_text("❌ Veri alınamadı")
+
+async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update):
+        return await deny(update)
+
+    msg = await update.message.reply_text("⏳ Hesaplanıyor...")
+
+    try:
+        r = requests.get(TRON_API_URL, params={"address": TRX_ADDRESS}, timeout=10)
+        data = r.json()
+
+        trx = data.get("balance", 0) / 1_000_000
+        usdt = 0
+
+        for t in data.get("trc20token_balances", []):
+            if t.get("tokenId") == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t":
+                usdt = int(t.get("balance", 0)) / 1_000_000
+
+        await msg.edit_text(
+            f"📍 {TRX_ADDRESS}\n"
+            f"TRX: {trx:,.2f}\n"
+            f"USDT: ${usdt:,.2f}"
+        )
+
+    except:
+        await msg.edit_text("❌ Bakiye okunamadı")
 
 # ==================== MAIN ====================
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("veri", veri))
+    app.add_handler(CommandHandler("tether", tether))
+
     app.run_polling()
 
 if __name__ == "__main__":
