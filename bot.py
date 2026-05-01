@@ -104,20 +104,35 @@ async def fetch_site_data(session, reports_url, csrf, site_id, today):
     ) as r:
         data = await r.json()
 
-        # DEBUG: API'nin döndüğü tüm key'leri logla
-        print(f"[DEBUG] site={site_id} keys={list(data.keys())} full_data={data}")
-
         dep = data.get("deposit") or [0, 0, 0]
         wth = data.get("withdraw") or [0, 0, 0]
-        dlv = data.get("teslimat") or data.get("delivery") or [0, 0, 0]
 
         return {
             "yat": safe(dep[0] if len(dep) > 0 else 0),
             "yat_adet": int(dep[2] or 0) if len(dep) > 2 else 0,
             "cek": safe(wth[0] if len(wth) > 0 else 0),
-            "cek_adet": int(wth[2] or 0) if len(wth) > 2 else 0,
-            "teslimat": safe(dlv[0] if len(dlv) > 0 else 0),
-            "teslimat_adet": int(dlv[2] or 0) if len(dlv) > 2 else 0
+            "cek_adet": int(wth[2] or 0) if len(wth) > 2 else 0
+        }
+
+async def fetch_total_delivery(session, reports_url, csrf, today):
+    """Site boş bırakılarak toplam teslimat verisini çeker."""
+    async with session.post(
+        reports_url,
+        headers={"X-CSRF-TOKEN": csrf},
+        json={
+            "site": "",
+            "dateone": today,
+            "datetwo": today,
+            "bank": "",
+            "user": ""
+        }
+    ) as r:
+        data = await r.json()
+        # delivery formatı: [adet, tutar]
+        dlv = data.get("delivery") or ["0", "0.00"]
+        return {
+            "teslimat": safe(dlv[1] if len(dlv) > 1 else 0),
+            "teslimat_adet": int(safe(dlv[0])) if len(dlv) > 0 else 0
         }
 
 async def fetch_panel(panel_url, username, password, sites, use_reports_plural=True):
@@ -157,7 +172,12 @@ async def fetch_panel(panel_url, username, password, sites, use_reports_plural=T
         ]
 
         values = await asyncio.gather(*tasks)
-        return dict(zip(sites.keys(), values))
+        site_data = dict(zip(sites.keys(), values))
+
+        # Toplam teslimat verisini çek (site boş = tüm siteler)
+        delivery = await fetch_total_delivery(session, reports_url, csrf, today)
+
+        return site_data, delivery
 
 # ==================== BOT ====================
 
@@ -227,7 +247,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("⏳ Veriler çekiliyor...")
 
     try:
-        berlin = await fetch_panel(PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, {
+        berlin, berlin_delivery = await fetch_panel(PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, {
             "BERLİN": {"id": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10"},
             "WinPanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d"},
             "JaguarPanel": {"id": "698e467b-a871-4e18-978e-3d70adc534f4"},
@@ -239,7 +259,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "SKODA": {"id": "976b9d82-1346-4c85-9271-a2a02b552aab"},
         }, True)
 
-        venus = await fetch_panel(VENUS_URL, VENUS_USERNAME, VENUS_PASSWORD, {
+        venus, venus_delivery = await fetch_panel(VENUS_URL, VENUS_USERNAME, VENUS_PASSWORD, {
             "B": {"id": "9d282a4b-9664-4467-a53e-6b774cbf6d01"},
             "W": {"id": "48bedac9-2d1b-4a96-b736-e55de3fba453"},
             "T": {"id": "dee8e5a2-38ad-4006-8ad9-c622471e9e69"},
@@ -263,14 +283,12 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for k, v in venus.items():
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
 
-
         # ==================== BERLİN GENEL TOPLAM ====================
 
         b_yat = 0
         b_cek = 0
         b_yat_adet = 0
         b_cek_adet = 0
-        b_teslimat = 0
 
         if berlin:
             for v in berlin.values():
@@ -278,7 +296,9 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 b_cek += v["cek"] or 0
                 b_yat_adet += v["yat_adet"] or 0
                 b_cek_adet += v["cek_adet"] or 0
-                b_teslimat += v["teslimat"] or 0
+
+        b_teslimat = berlin_delivery["teslimat"]
+        b_teslimat_adet = berlin_delivery["teslimat_adet"]
 
         b_net = b_yat - b_cek - b_teslimat
         b_emoji = "🟢" if b_net >= 0 else "🔴"
@@ -287,7 +307,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += "💰 BERLİN GENEL TOPLAM\n\n"
         text += f"Yatırım: {format_number(b_yat)} ({b_yat_adet})\n"
         text += f"Çekim: {format_number(b_cek)} ({b_cek_adet})\n"
-        text += f"Teslimat: {format_number(b_teslimat)}\n"
+        text += f"Teslimat: {format_number(b_teslimat)} ({b_teslimat_adet})\n"
         text += f"Fark: {b_emoji} {format_number(b_net)}\n"
 
 
@@ -318,18 +338,21 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if t.get("tokenId") == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t":
                 usdt = int(t.get("balance", 0)) / 1_000_000
 
-        # CoinGecko'dan anlık TRY kurları
+        # Binance'den anlık kurlar
         trx_try = 0.0
         usdt_try = 0.0
         try:
-            cg = requests.get(
-                "https://api.coingecko.com/api/v3/simple/price",
-                params={"ids": "tron,tether", "vs_currencies": "try"},
+            br = requests.get(
+                "https://api.binance.com/api/v3/ticker/price",
+                params={"symbols": '["TRXUSDT","USDTTRY"]'},
                 timeout=10
             )
-            cg_data = cg.json()
-            trx_try = cg_data.get("tron", {}).get("try", 0)
-            usdt_try = cg_data.get("tether", {}).get("try", 0)
+            for item in br.json():
+                if item["symbol"] == "TRXUSDT":
+                    trxusdt = float(item["price"])
+                elif item["symbol"] == "USDTTRY":
+                    usdt_try = float(item["price"])
+            trx_try = trxusdt * usdt_try
         except:
             pass
 
@@ -342,7 +365,7 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"💎 TRX: {trx:,.2f}\n"
         text += f"💵 USDT: {usdt:,.2f}\n"
         text += "\n━━━━━━━━━━━━━━\n"
-        text += "📈 Anlık Kurlar (CoinGecko)\n\n"
+        text += "📈 Anlık Kurlar (Binance)\n\n"
         text += f"TRX/TRY: {trx_try:,.4f} ₺\n"
         text += f"USDT/TRY: {usdt_try:,.2f} ₺\n"
         text += "\n━━━━━━━━━━━━━━\n"
@@ -356,6 +379,69 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         await msg.edit_text("❌ Bakiye okunamadı")
 
+async def debug_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Panel API'sinin döndüğü raw key'leri gösterir."""
+    if not is_admin(update):
+        return await deny(update)
+
+    msg = await update.message.reply_text("⏳ API kontrol ediliyor...")
+
+    try:
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+
+        login_url = f"{PANEL1_URL}/login"
+        reports_url = f"{PANEL1_URL}/reports/quickly"
+        connector = aiohttp.TCPConnector(ssl=ssl_ctx)
+
+        async with aiohttp.ClientSession(connector=connector) as session:
+            async with session.get(login_url) as r:
+                soup = BeautifulSoup(await r.text(), "html.parser")
+                token = soup.find("input", {"name": "_token"})
+                token = token["value"] if token else ""
+
+            await session.post(login_url, data={
+                "_token": token,
+                "email": PANEL1_USERNAME,
+                "password": PANEL1_PASSWORD
+            })
+
+            async with session.get(reports_url) as r:
+                soup = BeautifulSoup(await r.text(), "html.parser")
+                meta = soup.find("meta", {"name": "csrf-token"})
+                csrf = meta["content"] if meta else ""
+
+            today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
+
+            # İlk site (BERLİN) için raw data çek
+            async with session.post(
+                reports_url,
+                headers={"X-CSRF-TOKEN": csrf},
+                json={
+                    "site": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10",
+                    "dateone": today,
+                    "datetwo": today,
+                    "bank": "",
+                    "user": ""
+                }
+            ) as r:
+                data = await r.json()
+
+        text = f"🔍 API Raw Response\n\n"
+        text += f"Keys: {list(data.keys())}\n\n"
+        for key, val in data.items():
+            text += f"{key}: {val}\n"
+
+        # Telegram mesaj limiti 4096 karakter
+        if len(text) > 4000:
+            text = text[:4000] + "\n... (kesildi)"
+
+        await msg.edit_text(text)
+
+    except Exception as e:
+        await msg.edit_text(f"❌ Hata: {e}")
+
 # ==================== MAIN ====================
 
 def main():
@@ -365,6 +451,7 @@ def main():
     app.add_handler(CommandHandler("veri", veri))
     app.add_handler(CommandHandler("teslimat", teslimat_cmd))
     app.add_handler(CommandHandler("tether", tether))
+    app.add_handler(CommandHandler("debug", debug_cmd))
 
     app.run_polling()
 
