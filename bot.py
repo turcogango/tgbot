@@ -3,6 +3,7 @@
 
 import os
 import ssl
+import json
 import asyncio
 from datetime import datetime, timedelta
 
@@ -42,6 +43,35 @@ async def deny(update: Update):
 
 TRX_ADDRESS = "TDy4vHiBx9o6zwqD3TaCtSh3iioC6DUW1H"
 TRON_API_URL = "https://apilist.tronscan.org/api/account"
+
+# ==================== TESLİMAT KAYIT ====================
+
+TESLIMAT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "teslimat.json")
+
+def load_teslimat():
+    """Bugünün teslimat değerini dosyadan oku."""
+    today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
+    try:
+        with open(TESLIMAT_FILE, "r") as f:
+            data = json.load(f)
+        if data.get("date") == today:
+            return data.get("berlin", 0), data.get("venus", 0)
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return 0, 0
+
+def save_teslimat(berlin_val=None, venus_val=None):
+    """Teslimat değerini dosyaya kaydet. Mevcut değerleri korur."""
+    today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
+    current_berlin, current_venus = load_teslimat()
+
+    data = {
+        "date": today,
+        "berlin": berlin_val if berlin_val is not None else current_berlin,
+        "venus": venus_val if venus_val is not None else current_venus,
+    }
+    with open(TESLIMAT_FILE, "w") as f:
+        json.dump(data, f)
 
 # ==================== FORMAT ====================
 
@@ -129,7 +159,60 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return await deny(update)
 
-    await update.message.reply_text("🤖 Veri Bot\n\n/veri\n/tether")
+    await update.message.reply_text(
+        "🤖 Veri Bot\n\n"
+        "/veri — Günlük rapor\n"
+        "/teslimat — Teslimat değerini ayarla\n"
+        "/tether — USDT bakiye"
+    )
+
+async def teslimat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Kullanım:
+      /teslimat berlin 150000
+      /teslimat venus 80000
+      /teslimat              → mevcut değerleri gösterir
+    """
+    if not is_admin(update):
+        return await deny(update)
+
+    args = context.args
+
+    # Argüman yoksa mevcut değerleri göster
+    if not args:
+        b_tes, v_tes = load_teslimat()
+        today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
+        await update.message.reply_text(
+            f"📦 Teslimat ({today})\n\n"
+            f"BERLİN: {format_number(b_tes)}\n"
+            f"VENUS: {format_number(v_tes)}\n\n"
+            f"Ayarlamak için:\n"
+            f"/teslimat berlin 150000\n"
+            f"/teslimat venus 80000"
+        )
+        return
+
+    if len(args) < 2:
+        await update.message.reply_text(
+            "❌ Kullanım:\n/teslimat berlin 150000\n/teslimat venus 80000"
+        )
+        return
+
+    panel = args[0].lower()
+    try:
+        amount = float(args[1].replace(".", "").replace(",", "."))
+    except ValueError:
+        await update.message.reply_text("❌ Geçersiz miktar.")
+        return
+
+    if panel in ("berlin", "b"):
+        save_teslimat(berlin_val=amount)
+        await update.message.reply_text(f"✅ BERLİN teslimat: {format_number(amount)}")
+    elif panel in ("venus", "v"):
+        save_teslimat(venus_val=amount)
+        await update.message.reply_text(f"✅ VENUS teslimat: {format_number(amount)}")
+    else:
+        await update.message.reply_text("❌ Panel adı: berlin veya venus")
 
 async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
@@ -174,7 +257,11 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for k, v in venus.items():
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
 
-        # ==================== BERLİN GENEL TOPLAM + TESLİMAT ====================
+        # ==================== TESLİMAT DEĞERLERİNİ OKU ====================
+
+        berlin_teslimat, venus_teslimat = load_teslimat()
+
+        # ==================== BERLİN GENEL TOPLAM ====================
 
         b_yat = 0
         b_cek = 0
@@ -188,17 +275,54 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 b_yat_adet += v["yat_adet"] or 0
                 b_cek_adet += v["cek_adet"] or 0
 
-        teslimat = 0  # 🔥 gizli gider (istersen burayı değiştir)
-
-        net = b_yat - b_cek - teslimat
-        emoji = "🟢" if net >= 0 else "🔴"
+        b_net = b_yat - b_cek - berlin_teslimat
+        b_emoji = "🟢" if b_net >= 0 else "🔴"
 
         text += "\n━━━━━━━━━━━━━━\n"
         text += "💰 BERLİN GENEL TOPLAM\n\n"
         text += f"Yatırım: {format_number(b_yat)} ({b_yat_adet})\n"
         text += f"Çekim: {format_number(b_cek)} ({b_cek_adet})\n"
-        text += f"Teslimat: {format_number(teslimat)}\n"
-        text += f"Fark: {emoji} {format_number(net)}\n"
+        text += f"Teslimat: {format_number(berlin_teslimat)}\n"
+        text += f"Fark: {b_emoji} {format_number(b_net)}\n"
+
+        # ==================== VENUS GENEL TOPLAM ====================
+
+        v_yat = 0
+        v_cek = 0
+        v_yat_adet = 0
+        v_cek_adet = 0
+
+        if venus:
+            for v in venus.values():
+                v_yat += v["yat"] or 0
+                v_cek += v["cek"] or 0
+                v_yat_adet += v["yat_adet"] or 0
+                v_cek_adet += v["cek_adet"] or 0
+
+        v_net = v_yat - v_cek - venus_teslimat
+        v_emoji = "🟢" if v_net >= 0 else "🔴"
+
+        text += "\n━━━━━━━━━━━━━━\n"
+        text += "💰 VENUS GENEL TOPLAM\n\n"
+        text += f"Yatırım: {format_number(v_yat)} ({v_yat_adet})\n"
+        text += f"Çekim: {format_number(v_cek)} ({v_cek_adet})\n"
+        text += f"Teslimat: {format_number(venus_teslimat)}\n"
+        text += f"Fark: {v_emoji} {format_number(v_net)}\n"
+
+        # ==================== GENEL TOPLAM ====================
+
+        g_yat = b_yat + v_yat
+        g_cek = b_cek + v_cek
+        g_teslimat = berlin_teslimat + venus_teslimat
+        g_net = g_yat - g_cek - g_teslimat
+        g_emoji = "🟢" if g_net >= 0 else "🔴"
+
+        text += "\n━━━━━━━━━━━━━━\n"
+        text += "🏦 GENEL TOPLAM\n\n"
+        text += f"Yatırım: {format_number(g_yat)} ({b_yat_adet + v_yat_adet})\n"
+        text += f"Çekim: {format_number(g_cek)} ({b_cek_adet + v_cek_adet})\n"
+        text += f"Teslimat: {format_number(g_teslimat)}\n"
+        text += f"Fark: {g_emoji} {format_number(g_net)}\n"
 
         await msg.edit_text(text, parse_mode="Markdown")
 
@@ -213,6 +337,7 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("⏳ Hesaplanıyor...")
 
     try:
+        # Cüzdan bakiyesi
         r = requests.get(TRON_API_URL, params={"address": TRX_ADDRESS}, timeout=10)
         data = r.json()
 
@@ -223,11 +348,42 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if t.get("tokenId") == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t":
                 usdt = int(t.get("balance", 0)) / 1_000_000
 
-        await msg.edit_text(
-            f"📍 {TRX_ADDRESS}\n"
-            f"TRX: {trx:,.2f}\n"
-            f"USDT: ${usdt:,.2f}"
-        )
+        # Binance'den anlık TRY kurları
+        trx_try = 0.0
+        usdt_try = 0.0
+        try:
+            br = requests.get(
+                "https://api.binance.com/api/v3/ticker/price",
+                params={"symbols": '["TRXTRY","USDTTRY"]'},
+                timeout=10
+            )
+            for item in br.json():
+                if item["symbol"] == "TRXTRY":
+                    trx_try = float(item["price"])
+                elif item["symbol"] == "USDTTRY":
+                    usdt_try = float(item["price"])
+        except:
+            pass
+
+        # TL karşılıkları
+        trx_tl = trx * trx_try
+        usdt_tl = usdt * usdt_try
+        toplam_tl = trx_tl + usdt_tl
+
+        text = f"📍 {TRX_ADDRESS}\n\n"
+        text += f"💎 TRX: {trx:,.2f}\n"
+        text += f"💵 USDT: {usdt:,.2f}\n"
+        text += "\n━━━━━━━━━━━━━━\n"
+        text += "📈 Anlık Kurlar (Binance)\n\n"
+        text += f"TRX/TRY: {trx_try:,.4f} ₺\n"
+        text += f"USDT/TRY: {usdt_try:,.2f} ₺\n"
+        text += "\n━━━━━━━━━━━━━━\n"
+        text += "💰 TL Karşılıkları\n\n"
+        text += f"TRX: {trx_tl:,.2f} ₺\n"
+        text += f"USDT: {usdt_tl:,.2f} ₺\n"
+        text += f"\n🏦 Toplam: {toplam_tl:,.2f} ₺"
+
+        await msg.edit_text(text)
 
     except:
         await msg.edit_text("❌ Bakiye okunamadı")
@@ -239,6 +395,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("veri", veri))
+    app.add_handler(CommandHandler("teslimat", teslimat_cmd))
     app.add_handler(CommandHandler("tether", tether))
 
     app.run_polling()
