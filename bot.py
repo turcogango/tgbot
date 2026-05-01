@@ -3,7 +3,7 @@
 
 import os
 import ssl
-import json
+
 import asyncio
 from datetime import datetime, timedelta
 
@@ -44,34 +44,6 @@ async def deny(update: Update):
 TRX_ADDRESS = "TDy4vHiBx9o6zwqD3TaCtSh3iioC6DUW1H"
 TRON_API_URL = "https://apilist.tronscan.org/api/account"
 
-# ==================== TESLİMAT KAYIT ====================
-
-TESLIMAT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "teslimat.json")
-
-def load_teslimat():
-    """Bugünün teslimat değerini dosyadan oku."""
-    today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
-    try:
-        with open(TESLIMAT_FILE, "r") as f:
-            data = json.load(f)
-        if data.get("date") == today:
-            return data.get("berlin", 0), data.get("venus", 0)
-    except (FileNotFoundError, json.JSONDecodeError):
-        pass
-    return 0, 0
-
-def save_teslimat(berlin_val=None, venus_val=None):
-    """Teslimat değerini dosyaya kaydet. Mevcut değerleri korur."""
-    today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
-    current_berlin, current_venus = load_teslimat()
-
-    data = {
-        "date": today,
-        "berlin": berlin_val if berlin_val is not None else current_berlin,
-        "venus": venus_val if venus_val is not None else current_venus,
-    }
-    with open(TESLIMAT_FILE, "w") as f:
-        json.dump(data, f)
 
 # ==================== FORMAT ====================
 
@@ -188,57 +160,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 Veri Bot\n\n"
         "/veri — Günlük rapor\n"
-        "/teslimat — Teslimat değerini ayarla\n"
         "/tether — USDT bakiye"
     )
 
-async def teslimat_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Kullanım:
-      /teslimat berlin 150000
-      /teslimat venus 80000
-      /teslimat              → mevcut değerleri gösterir
-    """
-    if not is_admin(update):
-        return await deny(update)
-
-    args = context.args
-
-    # Argüman yoksa mevcut değerleri göster
-    if not args:
-        b_tes, v_tes = load_teslimat()
-        today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
-        await update.message.reply_text(
-            f"📦 Teslimat ({today})\n\n"
-            f"BERLİN: {format_number(b_tes)}\n"
-            f"VENUS: {format_number(v_tes)}\n\n"
-            f"Ayarlamak için:\n"
-            f"/teslimat berlin 150000\n"
-            f"/teslimat venus 80000"
-        )
-        return
-
-    if len(args) < 2:
-        await update.message.reply_text(
-            "❌ Kullanım:\n/teslimat berlin 150000\n/teslimat venus 80000"
-        )
-        return
-
-    panel = args[0].lower()
-    try:
-        amount = float(args[1].replace(".", "").replace(",", "."))
-    except ValueError:
-        await update.message.reply_text("❌ Geçersiz miktar.")
-        return
-
-    if panel in ("berlin", "b"):
-        save_teslimat(berlin_val=amount)
-        await update.message.reply_text(f"✅ BERLİN teslimat: {format_number(amount)}")
-    elif panel in ("venus", "v"):
-        save_teslimat(venus_val=amount)
-        await update.message.reply_text(f"✅ VENUS teslimat: {format_number(amount)}")
-    else:
-        await update.message.reply_text("❌ Panel adı: berlin veya venus")
 
 async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
@@ -378,68 +302,7 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         await msg.edit_text("❌ Bakiye okunamadı")
 
-async def debug_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Panel API'sinin döndüğü raw key'leri gösterir."""
-    if not is_admin(update):
-        return await deny(update)
 
-    msg = await update.message.reply_text("⏳ API kontrol ediliyor...")
-
-    try:
-        ssl_ctx = ssl.create_default_context()
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
-
-        login_url = f"{PANEL1_URL}/login"
-        reports_url = f"{PANEL1_URL}/reports/quickly"
-        connector = aiohttp.TCPConnector(ssl=ssl_ctx)
-
-        async with aiohttp.ClientSession(connector=connector) as session:
-            async with session.get(login_url) as r:
-                soup = BeautifulSoup(await r.text(), "html.parser")
-                token = soup.find("input", {"name": "_token"})
-                token = token["value"] if token else ""
-
-            await session.post(login_url, data={
-                "_token": token,
-                "email": PANEL1_USERNAME,
-                "password": PANEL1_PASSWORD
-            })
-
-            async with session.get(reports_url) as r:
-                soup = BeautifulSoup(await r.text(), "html.parser")
-                meta = soup.find("meta", {"name": "csrf-token"})
-                csrf = meta["content"] if meta else ""
-
-            today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
-
-            # İlk site (BERLİN) için raw data çek
-            async with session.post(
-                reports_url,
-                headers={"X-CSRF-TOKEN": csrf},
-                json={
-                    "site": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10",
-                    "dateone": today,
-                    "datetwo": today,
-                    "bank": "",
-                    "user": ""
-                }
-            ) as r:
-                data = await r.json()
-
-        text = f"🔍 API Raw Response\n\n"
-        text += f"Keys: {list(data.keys())}\n\n"
-        for key, val in data.items():
-            text += f"{key}: {val}\n"
-
-        # Telegram mesaj limiti 4096 karakter
-        if len(text) > 4000:
-            text = text[:4000] + "\n... (kesildi)"
-
-        await msg.edit_text(text)
-
-    except Exception as e:
-        await msg.edit_text(f"❌ Hata: {e}")
 
 # ==================== MAIN ====================
 
@@ -448,9 +311,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("veri", veri))
-    app.add_handler(CommandHandler("teslimat", teslimat_cmd))
     app.add_handler(CommandHandler("tether", tether))
-    app.add_handler(CommandHandler("debug", debug_cmd))
 
     app.run_polling()
 
