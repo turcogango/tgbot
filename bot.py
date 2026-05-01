@@ -276,12 +276,14 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if berlin:
             text += "📊 BERLİN\n\n"
             for k, v in berlin.items():
-                text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
+                fark = v['yat'] - v['cek']
+                text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\nFark: {format_number(fark)}\n\n"
 
         if venus:
             text += "📊 VENUS\n\n"
             for k, v in venus.items():
-                text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
+                fark = v['yat'] - v['cek']
+                text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\nFark: {format_number(fark)}\n\n"
 
         # ==================== BERLİN GENEL TOPLAM ====================
 
@@ -338,21 +340,18 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if t.get("tokenId") == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t":
                 usdt = int(t.get("balance", 0)) / 1_000_000
 
-        # Binance'den anlık kurlar
+        # CoinGecko'dan anlık kurlar
         trx_try = 0.0
         usdt_try = 0.0
         try:
-            br = requests.get(
-                "https://api.binance.com/api/v3/ticker/price",
-                params={"symbols": '["TRXUSDT","USDTTRY"]'},
+            cg = requests.get(
+                "https://api.coingecko.com/api/v3/simple/price",
+                params={"ids": "tron,tether", "vs_currencies": "try"},
                 timeout=10
             )
-            for item in br.json():
-                if item["symbol"] == "TRXUSDT":
-                    trxusdt = float(item["price"])
-                elif item["symbol"] == "USDTTRY":
-                    usdt_try = float(item["price"])
-            trx_try = trxusdt * usdt_try
+            cg_data = cg.json()
+            trx_try = cg_data.get("tron", {}).get("try", 0)
+            usdt_try = cg_data.get("tether", {}).get("try", 0)
         except:
             pass
 
@@ -365,7 +364,7 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"💎 TRX: {trx:,.2f}\n"
         text += f"💵 USDT: {usdt:,.2f}\n"
         text += "\n━━━━━━━━━━━━━━\n"
-        text += "📈 Anlık Kurlar (Binance)\n\n"
+        text += "📈 Anlık Kurlar (CoinGecko)\n\n"
         text += f"TRX/TRY: {trx_try:,.4f} ₺\n"
         text += f"USDT/TRY: {usdt_try:,.2f} ₺\n"
         text += "\n━━━━━━━━━━━━━━\n"
