@@ -104,14 +104,20 @@ async def fetch_site_data(session, reports_url, csrf, site_id, today):
     ) as r:
         data = await r.json()
 
+        # DEBUG: API'nin döndüğü tüm key'leri logla
+        print(f"[DEBUG] site={site_id} keys={list(data.keys())} full_data={data}")
+
         dep = data.get("deposit") or [0, 0, 0]
         wth = data.get("withdraw") or [0, 0, 0]
+        dlv = data.get("teslimat") or data.get("delivery") or [0, 0, 0]
 
         return {
             "yat": safe(dep[0] if len(dep) > 0 else 0),
             "yat_adet": int(dep[2] or 0) if len(dep) > 2 else 0,
             "cek": safe(wth[0] if len(wth) > 0 else 0),
-            "cek_adet": int(wth[2] or 0) if len(wth) > 2 else 0
+            "cek_adet": int(wth[2] or 0) if len(wth) > 2 else 0,
+            "teslimat": safe(dlv[0] if len(dlv) > 0 else 0),
+            "teslimat_adet": int(dlv[2] or 0) if len(dlv) > 2 else 0
         }
 
 async def fetch_panel(panel_url, username, password, sites, use_reports_plural=True):
@@ -257,9 +263,6 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for k, v in venus.items():
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
 
-        # ==================== TESLİMAT DEĞERLERİNİ OKU ====================
-
-        berlin_teslimat, venus_teslimat = load_teslimat()
 
         # ==================== BERLİN GENEL TOPLAM ====================
 
@@ -267,6 +270,7 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         b_cek = 0
         b_yat_adet = 0
         b_cek_adet = 0
+        b_teslimat = 0
 
         if berlin:
             for v in berlin.values():
@@ -274,55 +278,21 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 b_cek += v["cek"] or 0
                 b_yat_adet += v["yat_adet"] or 0
                 b_cek_adet += v["cek_adet"] or 0
+                b_teslimat += v["teslimat"] or 0
 
-        b_net = b_yat - b_cek - berlin_teslimat
+        b_net = b_yat - b_cek - b_teslimat
         b_emoji = "🟢" if b_net >= 0 else "🔴"
 
         text += "\n━━━━━━━━━━━━━━\n"
         text += "💰 BERLİN GENEL TOPLAM\n\n"
         text += f"Yatırım: {format_number(b_yat)} ({b_yat_adet})\n"
         text += f"Çekim: {format_number(b_cek)} ({b_cek_adet})\n"
-        text += f"Teslimat: {format_number(berlin_teslimat)}\n"
+        text += f"Teslimat: {format_number(b_teslimat)}\n"
         text += f"Fark: {b_emoji} {format_number(b_net)}\n"
 
-        # ==================== VENUS GENEL TOPLAM ====================
 
-        v_yat = 0
-        v_cek = 0
-        v_yat_adet = 0
-        v_cek_adet = 0
 
-        if venus:
-            for v in venus.values():
-                v_yat += v["yat"] or 0
-                v_cek += v["cek"] or 0
-                v_yat_adet += v["yat_adet"] or 0
-                v_cek_adet += v["cek_adet"] or 0
 
-        v_net = v_yat - v_cek - venus_teslimat
-        v_emoji = "🟢" if v_net >= 0 else "🔴"
-
-        text += "\n━━━━━━━━━━━━━━\n"
-        text += "💰 VENUS GENEL TOPLAM\n\n"
-        text += f"Yatırım: {format_number(v_yat)} ({v_yat_adet})\n"
-        text += f"Çekim: {format_number(v_cek)} ({v_cek_adet})\n"
-        text += f"Teslimat: {format_number(venus_teslimat)}\n"
-        text += f"Fark: {v_emoji} {format_number(v_net)}\n"
-
-        # ==================== GENEL TOPLAM ====================
-
-        g_yat = b_yat + v_yat
-        g_cek = b_cek + v_cek
-        g_teslimat = berlin_teslimat + venus_teslimat
-        g_net = g_yat - g_cek - g_teslimat
-        g_emoji = "🟢" if g_net >= 0 else "🔴"
-
-        text += "\n━━━━━━━━━━━━━━\n"
-        text += "🏦 GENEL TOPLAM\n\n"
-        text += f"Yatırım: {format_number(g_yat)} ({b_yat_adet + v_yat_adet})\n"
-        text += f"Çekim: {format_number(g_cek)} ({b_cek_adet + v_cek_adet})\n"
-        text += f"Teslimat: {format_number(g_teslimat)}\n"
-        text += f"Fark: {g_emoji} {format_number(g_net)}\n"
 
         await msg.edit_text(text, parse_mode="Markdown")
 
@@ -348,20 +318,18 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if t.get("tokenId") == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t":
                 usdt = int(t.get("balance", 0)) / 1_000_000
 
-        # Binance'den anlık TRY kurları
+        # CoinGecko'dan anlık TRY kurları
         trx_try = 0.0
         usdt_try = 0.0
         try:
-            br = requests.get(
-                "https://api.binance.com/api/v3/ticker/price",
-                params={"symbols": '["TRXTRY","USDTTRY"]'},
+            cg = requests.get(
+                "https://api.coingecko.com/api/v3/simple/price",
+                params={"ids": "tron,tether", "vs_currencies": "try"},
                 timeout=10
             )
-            for item in br.json():
-                if item["symbol"] == "TRXTRY":
-                    trx_try = float(item["price"])
-                elif item["symbol"] == "USDTTRY":
-                    usdt_try = float(item["price"])
+            cg_data = cg.json()
+            trx_try = cg_data.get("tron", {}).get("try", 0)
+            usdt_try = cg_data.get("tether", {}).get("try", 0)
         except:
             pass
 
@@ -374,7 +342,7 @@ async def tether(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"💎 TRX: {trx:,.2f}\n"
         text += f"💵 USDT: {usdt:,.2f}\n"
         text += "\n━━━━━━━━━━━━━━\n"
-        text += "📈 Anlık Kurlar (Binance)\n\n"
+        text += "📈 Anlık Kurlar (CoinGecko)\n\n"
         text += f"TRX/TRY: {trx_try:,.4f} ₺\n"
         text += f"USDT/TRY: {usdt_try:,.2f} ₺\n"
         text += "\n━━━━━━━━━━━━━━\n"
