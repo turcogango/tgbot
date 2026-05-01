@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Telegram Bot - FIXED (NoneType safe + BERLİN TOTAL)
+# Telegram Bot - Admin Kontrollü Full Versiyon
 
 import os
 import ssl
@@ -36,20 +36,14 @@ def is_admin(update: Update) -> bool:
     return update.effective_user.id in ADMIN_IDS
 
 async def deny(update: Update):
-    await update.message.reply_text("yetkin yok")
+    await update.message.reply_text("yetkin yok.")
 
 # ==================== TRX ====================
 
 TRX_ADDRESS = "TDy4vHiBx9o6zwqD3TaCtSh3iioC6DUW1H"
 TRON_API_URL = "https://apilist.tronscan.org/api/account"
 
-# ==================== SAFE ====================
-
-def safe_float(val):
-    try:
-        return float(val if val is not None else 0)
-    except:
-        return 0.0
+# ==================== FORMAT ====================
 
 def format_number(value):
     try:
@@ -57,6 +51,12 @@ def format_number(value):
         return f"{num:,}".replace(",", ".") + " TL"
     except:
         return "0 TL"
+
+def safe(v):
+    try:
+        return float(v or 0)
+    except:
+        return 0.0
 
 # ==================== PANEL ====================
 
@@ -78,9 +78,9 @@ async def fetch_site_data(session, reports_url, csrf, site_id, today):
         wth = data.get("withdraw") or [0, 0, 0]
 
         return {
-            "yat": safe_float(dep[0] if len(dep) > 0 else 0),
+            "yat": safe(dep[0] if len(dep) > 0 else 0),
             "yat_adet": int(dep[2] or 0) if len(dep) > 2 else 0,
-            "cek": safe_float(wth[0] if len(wth) > 0 else 0),
+            "cek": safe(wth[0] if len(wth) > 0 else 0),
             "cek_adet": int(wth[2] or 0) if len(wth) > 2 else 0
         }
 
@@ -128,14 +128,13 @@ async def fetch_panel(panel_url, username, password, sites, use_reports_plural=T
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return await deny(update)
-
-    await update.message.reply_text("veri bot aktif")
+    await update.message.reply_text("veri bot")
 
 async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update):
         return await deny(update)
 
-    msg = await update.message.reply_text("veriler çekiliyor...")
+    msg = await update.message.reply_text("çekiliyor...")
 
     try:
         berlin = await fetch_panel(PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, {
@@ -164,7 +163,6 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         today = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
         text = f"{today}\n\n"
 
-        # DETAY
         if berlin:
             text += "BERLİN\n\n"
             for k, v in berlin.items():
@@ -175,7 +173,8 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for k, v in venus.items():
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
 
-        # BERLİN TOPLAM
+        # ==================== BERLİN GENEL TOPLAM ====================
+
         b_yat = 0
         b_cek = 0
         b_yat_adet = 0
@@ -191,8 +190,8 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
         net = b_yat - b_cek
         emoji = "🟢" if net >= 0 else "🔴"
 
-        text += "━━━━━━━━━━\n"
-        text += "BERLİN TOPLAM\n\n"
+        text += "\n━━━━━━━━━━━━━━\n"
+        text += "💰 BERLİN GENEL TOPLAM\n\n"
         text += f"Yatırım: {format_number(b_yat)} ({b_yat_adet})\n"
         text += f"Çekim: {format_number(b_cek)} ({b_cek_adet})\n"
         text += f"Fark: {emoji} {format_number(net)}\n"
@@ -201,16 +200,14 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         print(e)
-        await msg.edit_text("hata oluştu")
+        await msg.edit_text("hata")
 
 # ==================== MAIN ====================
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("veri", veri))
-
     app.run_polling()
 
 if __name__ == "__main__":
