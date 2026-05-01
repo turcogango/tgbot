@@ -52,6 +52,12 @@ def format_number(value):
     except:
         return "0 TL"
 
+def safe(v):
+    try:
+        return float(v if v is not None else 0)
+    except:
+        return 0.0
+
 # ==================== PANEL ====================
 
 async def fetch_site_data(session, reports_url, csrf, site_id, today):
@@ -67,14 +73,15 @@ async def fetch_site_data(session, reports_url, csrf, site_id, today):
         }
     ) as r:
         data = await r.json()
-        dep = data.get("deposit", [0, 0, 0])
-        wth = data.get("withdraw", [0, 0, 0])
+
+        dep = data.get("deposit") or [0, 0, 0]
+        wth = data.get("withdraw") or [0, 0, 0]
 
         return {
-            "yat": dep[0],
-            "yat_adet": int(dep[2] or 0),
-            "cek": wth[0],
-            "cek_adet": int(wth[2] or 0)
+            "yat": safe(dep[0] if len(dep) > 0 else 0),
+            "yat_adet": int(dep[2] or 0) if len(dep) > 2 else 0,
+            "cek": safe(wth[0] if len(wth) > 0 else 0),
+            "cek_adet": int(wth[2] or 0) if len(wth) > 2 else 0
         }
 
 async def fetch_panel(panel_url, username, password, sites, use_reports_plural=True):
@@ -114,7 +121,6 @@ async def fetch_panel(panel_url, username, password, sites, use_reports_plural=T
         ]
 
         values = await asyncio.gather(*tasks)
-
         return dict(zip(sites.keys(), values))
 
 # ==================== BOT ====================
@@ -167,6 +173,29 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += "📊 VENUS\n\n"
             for k, v in venus.items():
                 text += f"{k}\nYat: {format_number(v['yat'])} ({v['yat_adet']})\nÇek: {format_number(v['cek'])} ({v['cek_adet']})\n\n"
+
+        # ==================== BERLİN GENEL TOPLAM ====================
+
+        b_yat = 0
+        b_cek = 0
+        b_yat_adet = 0
+        b_cek_adet = 0
+
+        if berlin:
+            for v in berlin.values():
+                b_yat += v["yat"] or 0
+                b_cek += v["cek"] or 0
+                b_yat_adet += v["yat_adet"] or 0
+                b_cek_adet += v["cek_adet"] or 0
+
+        net = b_yat - b_cek
+        emoji = "🟢" if net >= 0 else "🔴"
+
+        text += "\n━━━━━━━━━━━━━━\n"
+        text += "💰 BERLİN GENEL TOPLAM\n\n"
+        text += f"Yatırım: {format_number(b_yat)} ({b_yat_adet})\n"
+        text += f"Çekim: {format_number(b_cek)} ({b_cek_adet})\n"
+        text += f"Fark: {emoji} {format_number(net)}\n"
 
         await msg.edit_text(text, parse_mode="Markdown")
 
