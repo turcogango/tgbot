@@ -278,11 +278,15 @@ async def veri(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("⏳ Veriler çekiliyor...")
 
     try:
+        was_queued = False
         if VERI_FETCH_LOCK.locked():
             await msg.edit_text("⏳ Önceki /veri isteği sürüyor; sıraya alındı, bekleniyor...")
+            was_queued = True
 
         async with VERI_FETCH_LOCK:
-            await msg.edit_text("⏳ Veriler çekiliyor...")
+            # Aynı metne tekrar edit Telegram'da "message is not modified" hatası verir
+            if was_queued:
+                await msg.edit_text("⏳ Veriler çekiliyor...")
             berlin, berlin_delivery = await fetch_panel(PANEL1_URL, PANEL1_USERNAME, PANEL1_PASSWORD, {
                 "BERLİN": {"id": "f0db5b93-f3b0-4026-a8a9-6d62fa810e10"},
                 "WinPanel": {"id": "2f271e79-7386-4af9-7cf2-e699904c2d0d"},
